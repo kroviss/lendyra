@@ -68,8 +68,10 @@ class Show extends Component
             ->findOrFail($this->loanId);
 
         // Branch-scoped staff must not open another branch's loan by URL.
+        // Loans with no branch stay visible to everyone — they predate
+        // scoping or were created by a branchless admin.
         $scoped = auth()->user()?->scopedBranchId();
-        abort_if($scoped !== null && (int) $loan->branch_id !== $scoped, 403);
+        abort_if($scoped !== null && $loan->branch_id !== null && (int) $loan->branch_id !== $scoped, 403);
 
         return $loan;
     }
@@ -102,6 +104,8 @@ class Show extends Component
             });
 
             $this->dispatch('toast', message: __('Loan disbursed and activated'));
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e; // field errors stay inline
         } catch (Throwable $e) {
             $this->actionError = $e->getMessage();
         }
@@ -126,6 +130,8 @@ class Show extends Component
                 'approved_at' => now(),
             ]);
             $this->dispatch('toast', message: __('Loan approved'));
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e; // field errors stay inline
         } catch (Throwable $e) {
             $this->actionError = $e->getMessage();
         }
@@ -156,6 +162,8 @@ class Show extends Component
 
             session()->flash('status', __('Loan deleted'));
             $this->redirectRoute('loans.index');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e; // field errors stay inline
         } catch (Throwable $e) {
             $this->actionError = $e->getMessage();
         }
@@ -188,6 +196,8 @@ class Show extends Component
             }
 
             $this->dispatch('toast', message: __('Penalty of :amount waived', ['amount' => $waived->formatted()]));
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e; // field errors stay inline
         } catch (Throwable $e) {
             $this->actionError = $e->getMessage();
         }
@@ -228,6 +238,8 @@ class Show extends Component
                 'approved_at' => null,
             ]);
             $this->dispatch('toast', message: __('Loan rejected'));
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e; // field errors stay inline
         } catch (Throwable $e) {
             $this->actionError = $e->getMessage();
         }
@@ -262,6 +274,8 @@ class Show extends Component
             });
 
             $this->dispatch('toast', message: __('Loan written off'));
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e; // field errors stay inline
         } catch (Throwable $e) {
             $this->actionError = $e->getMessage();
         }
@@ -277,6 +291,8 @@ class Show extends Component
             $payment = $this->loan()->payments()->findOrFail($paymentId);
             app(RepaymentService::class)->reverse($payment, auth()->id());
             $this->dispatch('toast', message: __('Payment reversed'));
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e; // field errors stay inline
         } catch (Throwable $e) {
             $this->actionError = $e->getMessage();
         }
@@ -296,6 +312,8 @@ class Show extends Component
             $this->dispatch('toast', message: $delta > 0
                 ? __('Penalties updated (+:amount)', ['amount' => Money::minor((int) $delta, $this->loan()->currency, (int) $this->loan()->scale)->formatted()])
                 : __('Penalties are up to date'));
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e; // field errors stay inline
         } catch (Throwable $e) {
             $this->actionError = $e->getMessage();
         }
@@ -328,6 +346,8 @@ class Show extends Component
 
             $this->reset('showPaymentModal', 'paymentAmount', 'paymentReference');
             $this->dispatch('toast', message: __('Payment recorded'));
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e; // field errors stay inline
         } catch (Throwable $e) {
             $this->actionError = $e->getMessage();
         }
@@ -372,6 +392,8 @@ class Show extends Component
 
             $this->showPayoffModal = false;
             $this->dispatch('toast', message: __('Loan settled in full'));
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e; // field errors stay inline
         } catch (Throwable $e) {
             $this->actionError = $e->getMessage();
         }
@@ -429,6 +451,8 @@ class Show extends Component
 
             $this->reset('showCollateralModal', 'collateralType', 'collateralDescription', 'collateralValue', 'collateralPhotos', 'editingCollateralId');
             $this->dispatch('toast', message: $message);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e; // field errors stay inline
         } catch (Throwable $e) {
             $this->actionError = $e->getMessage();
         }
@@ -448,6 +472,8 @@ class Show extends Component
                 ->update(['status' => 'released', 'released_at' => today()]);
 
             $this->dispatch('toast', message: __('Collateral released'));
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e; // field errors stay inline
         } catch (Throwable $e) {
             $this->actionError = $e->getMessage();
         }
@@ -467,6 +493,8 @@ class Show extends Component
             $this->collateralDescription = (string) ($collateral->description ?? '');
             $this->collateralValue = (float) \LoanEngine\Money::minor((int) $collateral->estimated_value_minor, $this->loan()->currency, (int) $this->loan()->scale)->toDecimalString();
             $this->showCollateralModal = true;
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e; // field errors stay inline
         } catch (Throwable $e) {
             $this->actionError = $e->getMessage();
         }
@@ -482,6 +510,8 @@ class Show extends Component
             $this->loan()->collaterals()->whereKey($collateralId)->delete();
 
             $this->dispatch('toast', message: __('Collateral deleted'));
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e; // field errors stay inline
         } catch (Throwable $e) {
             $this->actionError = $e->getMessage();
         }
@@ -502,6 +532,8 @@ class Show extends Component
             $this->guarantorIdNumber = (string) ($guarantor->id_number ?? '');
             $this->guarantorRelationship = (string) ($guarantor->relationship ?? '');
             $this->showGuarantorModal = true;
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e; // field errors stay inline
         } catch (Throwable $e) {
             $this->actionError = $e->getMessage();
         }
@@ -542,6 +574,8 @@ class Show extends Component
 
             $this->reset('showGuarantorModal', 'guarantorName', 'guarantorPhone', 'guarantorIdNumber', 'guarantorRelationship', 'editingGuarantorId');
             $this->dispatch('toast', message: $message);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e; // field errors stay inline
         } catch (Throwable $e) {
             $this->actionError = $e->getMessage();
         }
@@ -558,6 +592,8 @@ class Show extends Component
             $this->loan()->guarantors()->whereKey($guarantorId)->delete();
 
             $this->dispatch('toast', message: __('Guarantor removed'));
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e; // field errors stay inline
         } catch (Throwable $e) {
             $this->actionError = $e->getMessage();
         }

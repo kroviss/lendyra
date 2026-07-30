@@ -117,7 +117,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/loans/{loan}/payments/{payment}/receipt', function (\App\Models\Loan $loan, int $payment) {
         $scoped = auth()->user()?->scopedBranchId();
-        abort_if($scoped !== null && (int) $loan->branch_id !== $scoped, 403);
+        abort_if($scoped !== null && $loan->branch_id !== null && (int) $loan->branch_id !== $scoped, 403);
 
         return view('loans.receipt', [
             'loan' => $loan->load('borrower'),
@@ -127,7 +127,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/loans/{loan}/statement', function (\App\Models\Loan $loan) {
         $scoped = auth()->user()?->scopedBranchId();
-        abort_if($scoped !== null && (int) $loan->branch_id !== $scoped, 403);
+        abort_if($scoped !== null && $loan->branch_id !== null && (int) $loan->branch_id !== $scoped, 403);
 
         $loan->load(['borrower', 'installments', 'payments']);
 
