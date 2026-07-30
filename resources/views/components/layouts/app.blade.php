@@ -20,12 +20,16 @@
                     ['route' => 'borrowers.index', 'label' => __('Borrowers')],
                     ['route' => 'loans.index', 'label' => __('Loans')],
                     ['route' => 'collaterals.index', 'label' => __('Collateral')],
-                    ['route' => 'reports.portfolio', 'label' => __('Reports'), 'match' => 'reports.*'],
+                    ['route' => 'payments.index', 'label' => __('Payments')],
+                    ['route' => 'reports.collections', 'label' => __('Reports'), 'match' => 'reports.*'],
                     in_array(auth()->user()?->role, ['admin', 'manager'], true)
                         ? ['route' => 'products.index', 'label' => __('Loan Products')]
                         : null,
                     in_array(auth()->user()?->role, ['admin', 'manager'], true)
                         ? ['route' => 'branches.index', 'label' => __('Branches')]
+                        : null,
+                    in_array(auth()->user()?->role, ['admin', 'manager'], true)
+                        ? ['route' => 'sms-logs.index', 'label' => __('SMS Log')]
                         : null,
                     auth()->user()?->role === 'admin'
                         ? ['route' => 'users.index', 'label' => __('Users')]

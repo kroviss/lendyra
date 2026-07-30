@@ -11,9 +11,13 @@
             </select>
         </div>
         <div class="flex gap-2 text-sm">
-            <a href="{{ route('reports.portfolio') }}" class="rounded-lg border border-gray-300 bg-white px-3 py-1.5 font-medium text-gray-700 hover:bg-gray-50">{{ __('Portfolio') }}</a>
+            @if (in_array(auth()->user()?->role, ['admin', 'manager', 'accountant'], true))
+                <a href="{{ route('reports.portfolio') }}" class="rounded-lg border border-gray-300 bg-white px-3 py-1.5 font-medium text-gray-700 hover:bg-gray-50">{{ __('Portfolio') }}</a>
+            @endif
             <span class="rounded-lg bg-indigo-600 px-3 py-1.5 font-medium text-white">{{ __('Collections') }}</span>
-            <a href="{{ route('reports.trial-balance') }}" class="rounded-lg border border-gray-300 bg-white px-3 py-1.5 font-medium text-gray-700 hover:bg-gray-50">{{ __('Trial Balance') }}</a>
+            @if (in_array(auth()->user()?->role, ['admin', 'manager', 'accountant'], true))
+                <a href="{{ route('reports.trial-balance') }}" class="rounded-lg border border-gray-300 bg-white px-3 py-1.5 font-medium text-gray-700 hover:bg-gray-50">{{ __('Trial Balance') }}</a>
+            @endif
         </div>
     </div>
 

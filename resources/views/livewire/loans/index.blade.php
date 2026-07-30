@@ -7,6 +7,7 @@
                 <option value="">{{ __('All statuses') }}</option>
                 <option value="active">{{ __('Active') }}</option>
                 <option value="overdue">{{ __('Overdue') }}</option>
+                <option value="pending_approval">{{ __('Pending approval') }}</option>
                 <option value="approved">{{ __('Awaiting disbursement') }}</option>
                 <option value="closed">{{ __('Closed') }}</option>
                 <option value="written_off">{{ __('Written off') }}</option>

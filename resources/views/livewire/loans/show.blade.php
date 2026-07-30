@@ -25,6 +25,34 @@
             <a href="{{ route('loans.index') }}" class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">← {{ __('Back') }}</a>
             <a href="{{ route('loans.statement', $loan) }}" target="_blank" class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">{{ __('Statement') }}</a>
 
+            @if ($loan->status->scheduleIsMutable())
+                @can('create-loans')
+                    <a href="{{ route('loans.edit', $loan->id) }}" class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">{{ __('Edit') }}</a>
+                @endcan
+            @endif
+
+            @if ($loan->status === \App\Enums\LoanStatus::PendingApproval)
+                @can('activate-loans')
+                    <button wire:click="reject" wire:confirm="{{ __('Reject this loan?') }}" wire:loading.attr="disabled"
+                        class="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-50">
+                        {{ __('Reject') }}
+                    </button>
+                    <button wire:click="approve" wire:loading.attr="disabled"
+                        class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50">
+                        {{ __('Approve') }}
+                    </button>
+                @endcan
+            @endif
+
+            @if (in_array($loan->status, [\App\Enums\LoanStatus::PendingApproval, \App\Enums\LoanStatus::Approved, \App\Enums\LoanStatus::Rejected], true))
+                @can('activate-loans')
+                    <button wire:click="deleteLoan" wire:confirm="{{ __('Delete this loan application? This cannot be undone.') }}" wire:loading.attr="disabled"
+                        class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-red-600 disabled:opacity-50">
+                        {{ __('Delete') }}
+                    </button>
+                @endcan
+            @endif
+
             @if ($loan->status === \App\Enums\LoanStatus::Approved)
                 @can('activate-loans')
                     <button wire:click="reject" wire:confirm="{{ __('Reject this loan?') }}" wire:loading.attr="disabled"
@@ -115,7 +143,16 @@
                         <td class="px-4 py-2">{{ $installment->due_date->format('Y-m-d') }}</td>
                         <td class="px-4 py-2 text-right">{{ \LoanEngine\Money::minor((int) $installment->principal_minor, $loan->currency, (int) $loan->scale)->toDecimalString() }}</td>
                         <td class="px-4 py-2 text-right">{{ \LoanEngine\Money::minor((int) $installment->interest_minor, $loan->currency, (int) $loan->scale)->toDecimalString() }}</td>
-                        <td class="px-4 py-2 text-right">{{ \LoanEngine\Money::minor((int) $installment->penalty_minor, $loan->currency, (int) $loan->scale)->toDecimalString() }}</td>
+                        <td class="px-4 py-2 text-right">
+                            {{ \LoanEngine\Money::minor((int) $installment->penalty_minor, $loan->currency, (int) $loan->scale)->toDecimalString() }}
+                            @can('write-off-loans')
+                                @if (! $installment->isSettled() && $installment->penaltyDue()->minor > 0)
+                                    <button wire:click="waivePenalty({{ $installment->id }})"
+                                        wire:confirm="{{ __('Waive the outstanding penalty on this installment?') }}"
+                                        class="ml-1 text-xs text-gray-400 hover:text-red-600">{{ __('waive') }}</button>
+                                @endif
+                            @endcan
+                        </td>
                         <td class="px-4 py-2 text-right font-medium">{{ $installment->toDue()->totalDue()->toDecimalString() }}</td>
                         <td class="px-4 py-2 text-center">
                             @if ($installment->isSettled())

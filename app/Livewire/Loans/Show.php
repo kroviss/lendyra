@@ -84,6 +84,86 @@ class Show extends Component
         }
     }
 
+    public function approve(): void
+    {
+        $this->actionError = null;
+
+        try {
+            \Illuminate\Support\Facades\Gate::authorize('activate-loans');
+
+            $loan = $this->loan();
+
+            if ($loan->status !== LoanStatus::PendingApproval) {
+                throw new \LogicException(__('Only pending loans can be approved.'));
+            }
+
+            $loan->update([
+                'status' => LoanStatus::Approved,
+                'approved_by' => auth()->id(),
+                'approved_at' => now(),
+            ]);
+            $this->dispatch('toast', message: __('Loan approved'));
+        } catch (Throwable $e) {
+            $this->actionError = $e->getMessage();
+        }
+    }
+
+    public function deleteLoan(): void
+    {
+        $this->actionError = null;
+
+        try {
+            \Illuminate\Support\Facades\Gate::authorize('activate-loans');
+
+            $loan = $this->loan();
+
+            if (! in_array($loan->status, [LoanStatus::Draft, LoanStatus::PendingApproval, LoanStatus::Approved, LoanStatus::Rejected], true)) {
+                throw new \LogicException(__('Only loans that were never disbursed can be deleted.'));
+            }
+
+            $loan->delete();
+
+            session()->flash('status', __('Loan deleted'));
+            $this->redirectRoute('loans.index');
+        } catch (Throwable $e) {
+            $this->actionError = $e->getMessage();
+        }
+    }
+
+    public function waivePenalty(int $installmentId): void
+    {
+        $this->actionError = null;
+
+        try {
+            \Illuminate\Support\Facades\Gate::authorize('write-off-loans');
+
+            $installment = $this->loan()->installments()->findOrFail($installmentId);
+            $waived = $installment->penaltyDue();
+
+            if ($waived->minor <= 0) {
+                throw new \LogicException(__('Nothing to waive on this installment.'));
+            }
+
+            $installment->update(['penalty_minor' => (int) $installment->penalty_paid_minor]);
+
+            if ($installment->fresh()->isSettled() && $installment->settled_at === null) {
+                $installment->update(['settled_at' => today()]);
+            }
+
+            $this->dispatch('toast', message: __('Penalty of :amount waived', ['amount' => $waived->toDecimalString()]));
+        } catch (Throwable $e) {
+            $this->actionError = $e->getMessage();
+        }
+    }
+
+    /** Opening any modal clears a stale error banner. */
+    public function updated($property): void
+    {
+        if (str_starts_with($property, 'show') && str_ends_with($property, 'Modal')) {
+            $this->actionError = null;
+        }
+    }
+
     public function reject(): void
     {
         $this->actionError = null;
@@ -93,8 +173,8 @@ class Show extends Component
 
             $loan = $this->loan();
 
-            if ($loan->status !== LoanStatus::Approved) {
-                throw new \LogicException(__('Only approved loans can be rejected.'));
+            if (! in_array($loan->status, [LoanStatus::Approved, LoanStatus::PendingApproval], true)) {
+                throw new \LogicException(__('Only pending or approved loans can be rejected.'));
             }
 
             $loan->update(['status' => LoanStatus::Rejected]);

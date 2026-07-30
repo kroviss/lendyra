@@ -50,6 +50,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/borrowers', Borrowers\Index::class)->name('borrowers.index');
     Route::get('/borrowers/create', Borrowers\Form::class)->middleware('role:admin,manager,loan_officer')->name('borrowers.create');
     Route::get('/borrowers/{borrower}/edit', Borrowers\Form::class)->middleware('role:admin,manager,loan_officer')->name('borrowers.edit');
+    Route::get('/borrowers/{borrower}', Borrowers\Show::class)->whereNumber('borrower')->name('borrowers.show');
 
     Route::middleware('role:admin,manager')->group(function () {
         Route::get('/products', Products\Index::class)->name('products.index');
@@ -63,7 +64,9 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/loans', Loans\Index::class)->name('loans.index');
     Route::get('/loans/create', Loans\Form::class)->middleware('role:admin,manager,loan_officer')->name('loans.create');
+    Route::get('/loans/{loan}/edit', Loans\Form::class)->whereNumber('loan')->middleware('role:admin,manager,loan_officer')->name('loans.edit');
     Route::get('/loans/{loan}', Loans\Show::class)->whereNumber('loan')->name('loans.show');
+    Route::get('/payments', \App\Livewire\Payments\Index::class)->name('payments.index');
 
     Route::get('/collaterals', \App\Livewire\Collaterals\Index::class)->name('collaterals.index');
 
@@ -86,7 +89,8 @@ Route::middleware('auth')->group(function () {
         Route::get('/users/{user}/edit', \App\Livewire\Users\Form::class)->name('users.edit');
     });
 
-    Route::get('/reports/portfolio', \App\Livewire\Reports\Portfolio::class)->name('reports.portfolio');
+    Route::get('/reports/portfolio', \App\Livewire\Reports\Portfolio::class)->middleware('role:admin,manager,accountant')->name('reports.portfolio');
     Route::get('/reports/collections', \App\Livewire\Reports\Collections::class)->name('reports.collections');
-    Route::get('/reports/trial-balance', \App\Livewire\Reports\TrialBalance::class)->name('reports.trial-balance');
+    Route::get('/reports/trial-balance', \App\Livewire\Reports\TrialBalance::class)->middleware('role:admin,manager,accountant')->name('reports.trial-balance');
+    Route::get('/sms-logs', \App\Livewire\SmsLogs\Index::class)->middleware('role:admin,manager')->name('sms-logs.index');
 });

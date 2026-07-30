@@ -17,6 +17,8 @@ use Throwable;
 
 class Form extends Component
 {
+    public ?Loan $loan = null;
+
     public ?int $borrower_id = null;
     public ?int $loan_product_id = null;
     public ?float $amount = null;
@@ -26,9 +28,28 @@ class Form extends Component
     public string $first_due_date = '';
     public string $purpose = '';
 
-    public function mount(): void
+    public function mount(?Loan $loan = null): void
     {
         $this->disbursed_at = today()->format('Y-m-d');
+
+        if ($loan !== null && $loan->exists) {
+            \Illuminate\Support\Facades\Gate::authorize('create-loans');
+
+            $this->loan = $loan;
+
+            if (! $this->loan->status->scheduleIsMutable()) {
+                abort(403, __('Active or closed loans cannot be edited.'));
+            }
+
+            $this->borrower_id = $this->loan->borrower_id;
+            $this->loan_product_id = $this->loan->loan_product_id;
+            $this->amount = (float) $this->loan->principal()->toDecimalString();
+            $this->annual_rate = (string) $this->loan->annual_rate;
+            $this->term_count = (string) $this->loan->term_count;
+            $this->disbursed_at = $this->loan->disbursed_at->format('Y-m-d');
+            $this->first_due_date = $this->loan->first_due_date?->format('Y-m-d') ?? '';
+            $this->purpose = (string) ($this->loan->purpose ?? '');
+        }
     }
 
     /** Prefill rate/term from the chosen product. */
@@ -111,6 +132,34 @@ class Form extends Component
         $product = LoanProduct::findOrFail($this->loan_product_id);
         $terms = $this->buildTerms($product); // throws on impossible combinations
 
+        if ($this->loan) {
+            if (! $this->loan->status->scheduleIsMutable()) {
+                abort(403);
+            }
+
+            $this->loan->update([
+                'borrower_id' => $this->borrower_id,
+                'loan_product_id' => $product->id,
+                'currency' => $product->currency,
+                'scale' => $product->scale,
+                'principal_minor' => $terms->principal->minor,
+                'fee_minor' => $this->feeMinor($product),
+                'annual_rate' => (float) $this->annual_rate,
+                'term_count' => (int) $this->term_count,
+                'method' => $product->method->value,
+                'frequency' => $product->frequency->value,
+                'basis' => $product->basis->value,
+                'disbursed_at' => $this->disbursed_at,
+                'first_due_date' => $this->first_due_date ?: null,
+                'purpose' => $this->purpose ?: null,
+            ]);
+
+            session()->flash('status', __('Loan updated'));
+            $this->redirectRoute('loans.show', $this->loan);
+
+            return;
+        }
+
         $loan = Loan::create([
             'loan_number' => 'LN-'.now()->format('y').'-'.str_pad((string) (Loan::withTrashed()->count() + 1), 5, '0', STR_PAD_LEFT),
             'borrower_id' => $this->borrower_id,
@@ -128,7 +177,9 @@ class Form extends Component
             'disbursed_at' => $this->disbursed_at,
             'first_due_date' => $this->first_due_date ?: null,
             'application_date' => today(),
-            'status' => LoanStatus::Approved,
+            'status' => \Illuminate\Support\Facades\Gate::allows('activate-loans')
+                ? LoanStatus::Approved
+                : LoanStatus::PendingApproval,
             'purpose' => $this->purpose ?: null,
             'created_by' => auth()->id(),
         ]);

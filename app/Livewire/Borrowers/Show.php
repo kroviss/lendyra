@@ -1,0 +1,48 @@
+<?php
+
+namespace App\Livewire\Borrowers;
+
+use App\Enums\LoanStatus;
+use App\Models\Borrower;
+use Illuminate\Contracts\View\View;
+use Livewire\Attributes\Locked;
+use Livewire\Component;
+use LoanEngine\Money;
+
+class Show extends Component
+{
+    #[Locked]
+    public int $borrowerId;
+
+    public function mount(int $borrower): void
+    {
+        $this->borrowerId = $borrower;
+    }
+
+    public function render(): View
+    {
+        $borrower = Borrower::with(['loans.product', 'loans.installments'])
+            ->findOrFail($this->borrowerId);
+
+        $outstanding = [];
+        foreach ($borrower->loans->where('status', LoanStatus::Active) as $loan) {
+            $outstanding[$loan->currency] = ($outstanding[$loan->currency] ?? 0) + $loan->principalOutstanding()->minor;
+        }
+
+        $outstandingLabel = $outstanding === []
+            ? '0.00'
+            : collect($outstanding)
+                ->map(fn (int $minor, string $currency) => Money::minor($minor, $currency)->toDecimalString().' '.$currency)
+                ->implode(' · ');
+
+        return view('livewire.borrowers.show', [
+            'borrower' => $borrower,
+            'outstandingLabel' => $outstandingLabel,
+            'activeCount' => $borrower->loans->where('status', LoanStatus::Active)->count(),
+            'overdueCount' => $borrower->loans->where('status', LoanStatus::Active)
+                ->filter(fn ($loan) => $loan->installments->contains(
+                    fn ($i) => $i->settled_at === null && $i->due_date->isPast()
+                ))->count(),
+        ]);
+    }
+}

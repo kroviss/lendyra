@@ -3,15 +3,15 @@
 
     <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         @foreach ([
-            ['label' => __('Active loans'), 'value' => $activeLoans],
-            ['label' => __('Portfolio outstanding'), 'value' => $outstanding],
-            ['label' => __('Overdue installments'), 'value' => $overdueCount],
-            ['label' => __('Collected this month'), 'value' => $collectedThisMonth],
+            ['label' => __('Active loans'), 'value' => $activeLoans, 'url' => route('loans.index', ['status' => 'active'])],
+            ['label' => __('Portfolio outstanding'), 'value' => $outstanding, 'url' => route('loans.index', ['status' => 'active'])],
+            ['label' => __('Overdue installments'), 'value' => $overdueCount, 'url' => route('reports.collections', ['window' => 'overdue'])],
+            ['label' => __('Collected this month'), 'value' => $collectedThisMonth, 'url' => route('payments.index', ['from' => now()->startOfMonth()->format('Y-m-d')])],
         ] as $stat)
-            <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+            <a href="{{ $stat['url'] }}" class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition hover:border-indigo-200 hover:shadow">
                 <p class="text-sm text-gray-500">{{ $stat['label'] }}</p>
                 <p class="mt-1 text-2xl font-semibold">{{ $stat['value'] }}</p>
-            </div>
+            </a>
         @endforeach
     </div>
 

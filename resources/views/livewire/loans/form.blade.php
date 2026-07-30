@@ -1,6 +1,6 @@
 <div>
     <div class="mb-6 flex items-center justify-between">
-        <h1 class="text-2xl font-semibold">{{ __('New loan') }}</h1>
+        <h1 class="text-2xl font-semibold">{{ $loan ? __('Edit loan').' '.$loan->loan_number : __('New loan') }}</h1>
         <a href="{{ route('loans.index') }}" class="text-sm text-gray-500 hover:text-gray-700">← {{ __('Back') }}</a>
     </div>
 
@@ -40,7 +40,7 @@
             <div class="flex justify-end">
                 <button type="submit" wire:loading.attr="disabled"
                     class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50">
-                    <span wire:loading.remove>{{ __('Create loan') }}</span>
+                    <span wire:loading.remove>{{ $loan ? __('Save changes') : __('Create loan') }}</span>
                     <span wire:loading>{{ __('Saving...') }}</span>
                 </button>
             </div>

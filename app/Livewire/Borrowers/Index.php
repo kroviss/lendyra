@@ -36,9 +36,7 @@ class Index extends BaseTable
 
     public function rowUrl(mixed $row): ?string
     {
-        return \Illuminate\Support\Facades\Gate::allows('create-loans')
-            ? route('borrowers.edit', $row)
-            : null;
+        return route('borrowers.show', $row);
     }
 
     public function render(): View
