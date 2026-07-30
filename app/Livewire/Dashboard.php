@@ -57,15 +57,17 @@ class Dashboard extends Component
             ->orderByDesc('c')
             ->value('currency') ?? 'USD';
 
+        // startOfMonth BEFORE subMonths — subtracting months from e.g.
+        // Jul 30 overflows through Feb 30 into March and loses a bucket.
         $chart = [];
         for ($i = 5; $i >= 0; $i--) {
-            $month = now()->subMonths($i);
+            $month = now()->startOfMonth()->subMonths($i);
             $chart[$month->format('M')] = 0;
         }
 
         LoanPayment::query()
             ->whereNull('reversed_at')
-            ->whereDate('paid_at', '>=', now()->subMonths(5)->startOfMonth())
+            ->whereDate('paid_at', '>=', now()->startOfMonth()->subMonths(5))
             ->whereHas('loan', fn ($q) => $q->where('currency', $primaryCurrency))
             ->chunkById(200, function ($payments) use (&$chart) {
                 foreach ($payments as $payment) {
