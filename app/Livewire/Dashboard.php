@@ -27,7 +27,7 @@ class Dashboard extends Component
         $sums = \App\Models\LoanInstallment::query()
             ->whereIn('loan_id', $currencies->keys())
             ->groupBy('loan_id')
-            ->select('loan_id', \Illuminate\Support\Facades\DB::raw('SUM(principal_minor - principal_paid_minor) as outstanding'))
+            ->select('loan_id', \Illuminate\Support\Facades\DB::raw('SUM(CAST(principal_minor AS SIGNED) - CAST(principal_paid_minor AS SIGNED)) as outstanding'))
             ->pluck('outstanding', 'loan_id');
 
         $outstandingByCurrency = [];
@@ -39,7 +39,7 @@ class Dashboard extends Component
         $overdueCount = LoanInstallment::query()
             ->whereHas('loan', fn ($q) => $scope($q->where('status', LoanStatus::Active)))
             ->whereNull('settled_at')
-            ->whereDate('due_date', '<', today())
+            ->where('due_date', '<', today())
             ->count();
 
         $collectedByCurrency = LoanPayment::query()
@@ -72,7 +72,7 @@ class Dashboard extends Component
         $monthly = LoanPayment::query()
             ->when($branch, fn ($q) => $q->whereHas('loan', fn ($l) => $l->where('branch_id', $branch)))
             ->whereNull('reversed_at')
-            ->whereDate('paid_at', '>=', now()->startOfMonth()->subMonths(5))
+            ->where('paid_at', '>=', now()->startOfMonth()->subMonths(5))
             ->whereHas('loan', fn ($q) => $q->where('currency', $primaryCurrency))
             ->groupBy('ym')
             ->select(

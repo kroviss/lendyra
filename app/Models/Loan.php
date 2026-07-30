@@ -28,7 +28,7 @@ class Loan extends Model
             'method' => InterestMethod::class,
             'frequency' => RepaymentFrequency::class,
             'basis' => AccrualBasis::class,
-            'annual_rate' => 'float',
+            'annual_rate' => 'decimal:4',
             'application_date' => 'date',
             'disbursed_at' => 'date',
             'first_due_date' => 'date',
@@ -55,12 +55,14 @@ class Loan extends Model
 
     public function installments(): HasMany
     {
-        return $this->hasMany(LoanInstallment::class)->orderBy('number');
+        // chaperone() back-fills the inverse relation, so an installment
+        // never lazy-loads its own loan for currency/scale lookups.
+        return $this->hasMany(LoanInstallment::class)->orderBy('number')->chaperone();
     }
 
     public function payments(): HasMany
     {
-        return $this->hasMany(LoanPayment::class);
+        return $this->hasMany(LoanPayment::class)->chaperone();
     }
 
     public function guarantors(): HasMany

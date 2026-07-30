@@ -212,9 +212,33 @@ abstract class BaseTable extends Component
             ->values();
     }
 
-    /** Stream the CURRENT filtered+sorted view as CSV (Excel-friendly BOM). */
+    /**
+     * Export the CURRENT filtered+sorted view as CSV (Excel-friendly BOM).
+     *
+     * Livewire buffers download responses in memory, so the row count is
+     * capped: shared hosting cannot hold an unbounded book in RAM.
+     * Override exportLimit() or canExport() per table as needed.
+     */
+    protected function exportLimit(): int
+    {
+        return (int) config('tablewire.export_limit', 10000);
+    }
+
+    protected function canExport(): bool
+    {
+        return true;
+    }
+
+    #[Computed]
+    public function exportAllowed(): bool
+    {
+        return $this->canExport();
+    }
+
     public function exportCsv(): \Symfony\Component\HttpFoundation\StreamedResponse
     {
+        abort_unless($this->canExport(), 403);
+
         $query = $this->query();
         $this->applySearch($query);
         $this->applySort($query);
@@ -229,7 +253,7 @@ abstract class BaseTable extends Component
             fwrite($out, "\xEF\xBB\xBF");
             fputcsv($out, $columns->map(fn (Column $c) => $c->label)->all());
 
-            $query->chunk(500, function ($rows) use ($out, $columns) {
+            $query->take($this->exportLimit())->chunk(500, function ($rows) use ($out, $columns) {
                 foreach ($rows as $row) {
                     fputcsv($out, $columns->map(function (Column $c) use ($row) {
                         $value = $c->render($row);

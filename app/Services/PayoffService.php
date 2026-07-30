@@ -61,7 +61,7 @@ class PayoffService
             $accruedRemaining = $quote->accruedInterest->minor;
 
             $loan->installments()
-                ->whereDate('due_date', '>', $cutoff)
+                ->where('due_date', '>', $cutoff)
                 ->orderBy('number')
                 ->get()
                 ->each(function (LoanInstallment $installment) use (&$accruedRemaining) {

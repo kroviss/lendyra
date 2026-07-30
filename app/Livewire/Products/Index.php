@@ -40,7 +40,7 @@ class Index extends BaseTable
             Column::make('term_count', __('Term'))->center(),
             Column::make('method', __('Method'))
                 ->format(fn ($value) => $value->label()),
-            Column::make('loans_count', __('Loans'))->center()->sortable(),
+            Column::make('loans_count', __('Loans'))->center(),
             Column::make('is_active', __('Status'))->center()->format(
                 fn ($value) => $value
                     ? '<span class="inline-flex rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">'.__('Active').'</span>'

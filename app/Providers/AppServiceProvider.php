@@ -15,6 +15,10 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // Keeps unique indexes under the 767-byte limit on MySQL 5.7 /
+        // MariaDB 10.1 shared hosting.
+        \Illuminate\Support\Facades\Schema::defaultStringLength(191);
+
         // Role middleware must re-run on Livewire update requests, not just
         // the initial page load — otherwise a demoted user's open page
         // keeps executing privileged actions.

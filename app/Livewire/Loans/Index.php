@@ -32,7 +32,7 @@ class Index extends BaseTable
             ->when(auth()->user()?->scopedBranchId(), fn (Builder $q, int $branch) => $q->where('branch_id', $branch))
             ->when($this->statusFilter === 'overdue', fn (Builder $q) => $q
                 ->where('status', \App\Enums\LoanStatus::Active)
-                ->whereHas('installments', fn ($i) => $i->whereNull('settled_at')->whereDate('due_date', '<', today())))
+                ->whereHas('installments', fn ($i) => $i->whereNull('settled_at')->where('due_date', '<', today())))
             ->when($this->statusFilter !== '' && $this->statusFilter !== 'overdue',
                 fn (Builder $q) => $q->where('status', $this->statusFilter));
     }
@@ -40,6 +40,11 @@ class Index extends BaseTable
     protected function searchAlso(): array
     {
         return ['borrower.last_name', 'borrower.phone', 'borrower.id_number'];
+    }
+
+    protected function canExport(): bool
+    {
+        return in_array(auth()->user()?->role, ['admin', 'manager', 'loan_officer', 'accountant'], true);
     }
 
     protected function columns(): array

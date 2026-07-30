@@ -50,8 +50,8 @@ class Collections extends Component
             ->whereHas('loan', fn ($q) => $q->where('status', LoanStatus::Active)
                 ->when(auth()->user()?->scopedBranchId(), fn ($l, $branch) => $l->where('branch_id', $branch)))
             ->with(['loan.borrower'])
-            ->when($from, fn ($q) => $q->whereDate('due_date', '>=', $from))
-            ->whereDate('due_date', '<=', $to)
+            ->when($from, fn ($q) => $q->where('due_date', '>=', $from))
+            ->where('due_date', '<=', $to)
             ->when(trim($this->search) !== '', function ($q) {
                 $like = '%'.str_replace(['%', '_'], ['\%', '\_'], trim($this->search)).'%';
                 $q->whereHas('loan', fn ($l) => $l
@@ -69,7 +69,7 @@ class Collections extends Component
             ->reorder()
             ->groupBy('loan_id')
             ->select('loan_id', \Illuminate\Support\Facades\DB::raw(
-                'SUM(principal_minor - principal_paid_minor + interest_minor - interest_paid_minor + penalty_minor - penalty_paid_minor) as due'
+                'SUM(CAST(principal_minor AS SIGNED) - CAST(principal_paid_minor AS SIGNED) + CAST(interest_minor AS SIGNED) - CAST(interest_paid_minor AS SIGNED) + CAST(penalty_minor AS SIGNED) - CAST(penalty_paid_minor AS SIGNED)) as due'
             ))
             ->pluck('due', 'loan_id');
 

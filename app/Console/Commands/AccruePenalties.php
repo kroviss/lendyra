@@ -23,7 +23,7 @@ class AccruePenalties extends Command
             ->where('status', LoanStatus::Active)
             ->whereHas('installments', fn ($q) => $q
                 ->whereNull('settled_at')
-                ->whereDate('due_date', '<', $asOf->format('Y-m-d')))
+                ->where('due_date', '<', $asOf->format('Y-m-d')))
             ->with('product')
             ->chunkById(100, function ($loans) use ($penalties, $asOf, &$count) {
                 foreach ($loans as $loan) {

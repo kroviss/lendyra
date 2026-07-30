@@ -27,7 +27,7 @@ class PenaltyService
         $cutoff = $asOf->format('Y-m-d');
 
         $loan->installments()
-            ->whereDate('due_date', '<', $cutoff)
+            ->where('due_date', '<', $cutoff)
             ->whereNull('settled_at')
             ->get()
             ->each(function (LoanInstallment $installment) use ($config, $asOf) {

@@ -62,10 +62,19 @@ class Show extends Component
         $this->payoffDate = today()->format('Y-m-d');
     }
 
+    private ?Loan $loanCache = null;
+
     private function loan(): Loan
     {
-        $loan = Loan::with(['borrower', 'product', 'installments', 'payments.allocations'])
-            ->findOrFail($this->loanId);
+        if ($this->loanCache !== null) {
+            return $this->loanCache;
+        }
+
+        $loan = Loan::with([
+            'borrower', 'product', 'installments',
+            'payments.allocations.installment', 'payments.receivedBy',
+            'createdBy', 'approvedBy', 'disbursedBy',
+        ])->findOrFail($this->loanId);
 
         // Branch-scoped staff must not open another branch's loan by URL.
         // Loans with no branch stay visible to everyone — they predate
@@ -73,7 +82,13 @@ class Show extends Component
         $scoped = auth()->user()?->scopedBranchId();
         abort_if($scoped !== null && $loan->branch_id !== null && (int) $loan->branch_id !== $scoped, 403);
 
-        return $loan;
+        return $this->loanCache = $loan;
+    }
+
+    /** Drop the per-request cache after any write. */
+    private function forgetLoan(): void
+    {
+        $this->loanCache = null;
     }
 
     public function activate(): void
@@ -601,6 +616,10 @@ class Show extends Component
 
     public function render(): View
     {
+        // Actions in this request already mutated the loan; always render
+        // from fresh state.
+        $this->forgetLoan();
+
         return view('livewire.loans.show', [
             'loan' => $this->loan()->load(['collaterals', 'guarantors']),
         ]);

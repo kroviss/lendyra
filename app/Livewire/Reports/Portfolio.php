@@ -28,18 +28,18 @@ class Portfolio extends Component
         $outstandingPerLoan = \App\Models\LoanInstallment::query()
             ->whereIn('loan_id', $currencies->keys())
             ->groupBy('loan_id')
-            ->select('loan_id', \Illuminate\Support\Facades\DB::raw('SUM(principal_minor - principal_paid_minor) as outstanding'))
+            ->select('loan_id', \Illuminate\Support\Facades\DB::raw('SUM(CAST(principal_minor AS SIGNED) - CAST(principal_paid_minor AS SIGNED)) as outstanding'))
             ->pluck('outstanding', 'loan_id');
 
         $overdueAgg = \App\Models\LoanInstallment::query()
             ->whereIn('loan_id', $currencies->keys())
             ->whereNull('settled_at')
-            ->whereDate('due_date', '<', $today)
+            ->where('due_date', '<', $today)
             ->groupBy('loan_id')
             ->select(
                 'loan_id',
                 \Illuminate\Support\Facades\DB::raw('MIN(due_date) as first_overdue'),
-                \Illuminate\Support\Facades\DB::raw('SUM(principal_minor - principal_paid_minor + interest_minor - interest_paid_minor + penalty_minor - penalty_paid_minor) as overdue_minor')
+                \Illuminate\Support\Facades\DB::raw('SUM(CAST(principal_minor AS SIGNED) - CAST(principal_paid_minor AS SIGNED) + CAST(interest_minor AS SIGNED) - CAST(interest_paid_minor AS SIGNED) + CAST(penalty_minor AS SIGNED) - CAST(penalty_paid_minor AS SIGNED)) as overdue_minor')
             )
             ->get()
             ->keyBy('loan_id');

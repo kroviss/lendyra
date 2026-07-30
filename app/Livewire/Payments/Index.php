@@ -38,8 +38,8 @@ class Index extends BaseTable
             ->with(['loan.borrower', 'receivedBy'])
             ->when(auth()->user()?->scopedBranchId(), fn (Builder $q, int $branch) => $q->whereHas('loan', fn ($l) => $l->where('branch_id', $branch)))
             ->when($this->methodFilter !== '', fn (Builder $q) => $q->where('method', $this->methodFilter))
-            ->when($this->from !== '', fn (Builder $q) => $q->whereDate('paid_at', '>=', $this->from))
-            ->when($this->to !== '', fn (Builder $q) => $q->whereDate('paid_at', '<=', $this->to));
+            ->when($this->from !== '', fn (Builder $q) => $q->where('paid_at', '>=', $this->from))
+            ->when($this->to !== '', fn (Builder $q) => $q->where('paid_at', '<=', $this->to));
     }
 
     protected function searchAlso(): array
@@ -86,6 +86,11 @@ class Index extends BaseTable
         return $row->loan ? route('loans.show', $row->loan) : null;
     }
 
+    protected function canExport(): bool
+    {
+        return in_array(auth()->user()?->role, ['admin', 'manager', 'accountant'], true);
+    }
+
     public function setToday(): void
     {
         $this->from = today()->format('Y-m-d');
@@ -101,6 +106,7 @@ class Index extends BaseTable
         $this->applySearch($query);
 
         $rows = $query
+            ->withoutEagerLoads()
             ->join('loans', 'loans.id', '=', 'loan_payments.loan_id')
             ->groupBy('loans.currency', 'loan_payments.method')
             ->select('loans.currency', 'loan_payments.method', \Illuminate\Support\Facades\DB::raw('SUM(amount_minor) as total'))

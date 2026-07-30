@@ -34,7 +34,7 @@ class SendReminders extends Command
                 'date' => $i->due_date->format('Y-m-d'),
             ]),
             sender: $sender,
-            query: fn ($q) => $q->whereDate('due_date', $today->copy()->addDays($daysBefore)->format('Y-m-d')),
+            query: fn ($q) => $q->where('due_date', $today->copy()->addDays($daysBefore)->format('Y-m-d')),
         );
 
         // Overdue: anything unpaid and past due, one notice per week.
@@ -47,8 +47,12 @@ class SendReminders extends Command
                 'date' => $i->due_date->format('Y-m-d'),
             ]),
             sender: $sender,
-            query: fn ($q) => $q->whereDate('due_date', '<', $today->format('Y-m-d'))
-                ->whereRaw('DATEDIFF(?, due_date) % 7 = 0', [$today->format('Y-m-d')]),
+            // Weekly notices: compute the exact due-dates that are a
+            // multiple of 7 days old, so the query stays index-eligible
+            // (a DATEDIFF() % 7 predicate full-scans the table nightly).
+            query: fn ($q) => $q->whereIn('due_date', collect(range(1, 52))
+                ->map(fn (int $week) => $today->copy()->subWeeks($week)->format('Y-m-d'))
+                ->all()),
         );
 
         $this->info("{$sent} reminder(s) sent.");
@@ -66,6 +70,14 @@ class SendReminders extends Command
             ->tap($query)
             ->with('loan.borrower')
             ->chunkById(100, function ($installments) use ($kind, $dueDate, $template, $sender, &$count) {
+                // One dedup lookup per chunk instead of one per installment.
+                $alreadySent = DB::table('sms_logs')
+                    ->where('kind', $kind)
+                    ->where('sent_for', $dueDate)
+                    ->whereIn('loan_installment_id', $installments->pluck('id'))
+                    ->pluck('loan_installment_id')
+                    ->all();
+
                 foreach ($installments as $installment) {
                     $phone = $installment->loan->borrower?->phone;
 
@@ -73,13 +85,7 @@ class SendReminders extends Command
                         continue;
                     }
 
-                    $alreadySent = DB::table('sms_logs')->where([
-                        'loan_installment_id' => $installment->id,
-                        'kind' => $kind,
-                        'sent_for' => $dueDate,
-                    ])->exists();
-
-                    if ($alreadySent) {
+                    if (in_array($installment->id, $alreadySent, true)) {
                         continue;
                     }
 

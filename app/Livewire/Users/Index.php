@@ -37,6 +37,11 @@ class Index extends BaseTable
             ->when($this->activeFilter !== '', fn (Builder $q) => $q->where('is_active', $this->activeFilter === '1'));
     }
 
+    protected function canExport(): bool
+    {
+        return in_array(auth()->user()?->role, ['admin'], true);
+    }
+
     protected function columns(): array
     {
         return [
