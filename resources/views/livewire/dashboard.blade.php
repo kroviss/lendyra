@@ -23,7 +23,7 @@
         <div class="flex items-end gap-3">
             @foreach ($chartBars as $bar)
                 <div class="group flex flex-1 flex-col items-center gap-1">
-                    <span class="text-xs text-gray-400 opacity-0 transition group-hover:opacity-100">{{ $bar['value'] }}</span>
+                    <span class="text-xs font-medium text-gray-500">{{ $bar["value"] }}</span>
                     {{-- Fixed-height track so the percentage height of the bar resolves --}}
                     <div class="flex h-32 w-full items-end">
                         <div class="w-full rounded-t-md bg-indigo-500 transition group-hover:bg-indigo-600" style="height: {{ max(2, $bar['height']) }}%"></div>
