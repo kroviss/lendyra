@@ -1,0 +1,25 @@
+{
+    "name": "tablewire/tablewire",
+    "description": "Beautiful datatable and form components for Laravel Livewire 3 + Tailwind CSS. Zero JS build step — Alpine.js powered.",
+    "type": "library",
+    "license": "proprietary",
+    "keywords": ["laravel", "livewire", "datatable", "table", "forms", "tailwind", "alpine"],
+    "require": {
+        "php": "^8.2",
+        "livewire/livewire": "^3.0",
+        "illuminate/support": "^10.0|^11.0|^12.0|^13.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "TableWire\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "TableWire\\TableWireServiceProvider"
+            ]
+        }
+    },
+    "minimum-stability": "stable"
+}

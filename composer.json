@@ -2,7 +2,7 @@
     "$schema": "https://getcomposer.org/schema.json",
     "name": "lendyra/lendyra",
     "type": "project",
-    "description": "Lendyra — loan management system for microfinance and lending businesses.",
+    "description": "Lendyra \u2014 loan management system for microfinance and lending businesses.",
     "keywords": [
         "laravel",
         "framework"
@@ -89,9 +89,14 @@
     },
     "minimum-stability": "stable",
     "prefer-stable": true,
-    "repositories": [{
-        "name": "tablewire",
-        "type": "path",
-        "url": "../tablewire"
-    }]
+    "repositories": [
+        {
+            "name": "tablewire",
+            "type": "path",
+            "url": "packages/tablewire",
+            "options": {
+                "symlink": false
+            }
+        }
+    ]
 }

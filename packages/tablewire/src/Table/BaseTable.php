@@ -1,0 +1,202 @@
+<?php
+
+namespace TableWire\Table;
+
+use Illuminate\Contracts\Database\Eloquent\Builder;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Contracts\View\View;
+use Livewire\Attributes\Computed;
+use Livewire\Component;
+use Livewire\WithPagination;
+
+abstract class BaseTable extends Component
+{
+    use WithPagination;
+
+    public string $search = '';
+
+    /** Sort state: "field" for ascending, "-field" for descending. */
+    public string $sort = '';
+
+    public int $perPage = 0;
+
+    /** @var array<int, string> Primary keys of selected rows (current page only). */
+    public array $selected = [];
+
+    public bool $selectPage = false;
+
+    /**
+     * The base query for the table. Apply your own scopes, eager loads
+     * and default filters here — search and sort are applied on top.
+     */
+    abstract protected function query(): Builder;
+
+    /** @return Column[] */
+    abstract protected function columns(): array;
+
+    /**
+     * Bulk actions offered when rows are selected: [method => label].
+     * Each method receives the selection via $this->selected.
+     */
+    public function bulkActions(): array
+    {
+        return [];
+    }
+
+    /** Return a URL to make the whole row clickable, or null. */
+    public function rowUrl(mixed $row): ?string
+    {
+        return null;
+    }
+
+    public function mount(): void
+    {
+        if ($this->perPage <= 0) {
+            $this->perPage = (int) config('tablewire.per_page', 25);
+        }
+    }
+
+    protected function queryString(): array
+    {
+        return [
+            'search' => ['except' => '', 'as' => 'q'],
+            'sort' => ['except' => ''],
+            'perPage' => ['except' => (int) config('tablewire.per_page', 25)],
+        ];
+    }
+
+    #[Computed]
+    public function rows(): LengthAwarePaginator
+    {
+        $query = $this->query();
+
+        $this->applySearch($query);
+        $this->applySort($query);
+
+        return $query->paginate($this->perPage);
+    }
+
+    public function sortBy(string $field): void
+    {
+        // Whitelist against declared sortable columns so arbitrary
+        // client-side payloads can never reach ORDER BY.
+        if (! $this->sortableFields()->contains($field)) {
+            return;
+        }
+
+        $this->sort = $this->sort === $field ? '-'.$field : $field;
+        $this->resetPage();
+        $this->clearSelection();
+    }
+
+    public function clearSelection(): void
+    {
+        $this->selected = [];
+        $this->selectPage = false;
+    }
+
+    public function updatedSearch(): void
+    {
+        $this->resetPage();
+        $this->clearSelection();
+    }
+
+    public function updatedPerPage(): void
+    {
+        $this->resetPage();
+        $this->clearSelection();
+    }
+
+    /**
+     * Selection is page-scoped: any page change clears it so a bulk
+     * action never silently includes rows the user can no longer see.
+     */
+    public function updatedPaginators(): void
+    {
+        $this->clearSelection();
+    }
+
+    public function updatedSelectPage(bool $value): void
+    {
+        $this->selected = $value
+            ? $this->rows->getCollection()->map(fn ($row) => (string) $row->getKey())->all()
+            : [];
+    }
+
+    public function updatedSelected(): void
+    {
+        $this->selectPage = false;
+    }
+
+    protected function applySearch(Builder $query): void
+    {
+        $term = trim($this->search);
+
+        if ($term === '') {
+            return;
+        }
+
+        $columns = collect($this->columns())->filter(
+            fn (Column $column) => $column->searchable
+        );
+
+        if ($columns->isEmpty()) {
+            return;
+        }
+
+        $like = '%'.str_replace(['%', '_'], ['\%', '\_'], $term).'%';
+
+        $query->where(function (Builder $outer) use ($columns, $like) {
+            foreach ($columns as $column) {
+                if (str_contains($column->field, '.')) {
+                    [$relation, $field] = explode('.', $column->field, 2);
+                    $outer->orWhereHas($relation, fn (Builder $sub) => $sub->where($field, 'like', $like));
+                } else {
+                    $outer->orWhere($outer->getModel()->qualifyColumn($column->field), 'like', $like);
+                }
+            }
+        });
+    }
+
+    protected function applySort(Builder $query): void
+    {
+        $field = ltrim($this->sort, '-');
+
+        if ($this->sort === '' || ! $this->sortableFields()->contains($field)) {
+            $this->defaultSort($query);
+
+            return;
+        }
+
+        $direction = str_starts_with($this->sort, '-') ? 'desc' : 'asc';
+
+        // reorder() drops any orderBy baked into query() — an explicit user
+        // sort must win. The key tiebreaker keeps pagination deterministic.
+        $query->reorder()
+            ->orderBy($field, $direction)
+            ->orderBy($query->getModel()->getQualifiedKeyName(), $direction);
+    }
+
+    /** Sort applied when the user has not chosen one. Override as needed. */
+    protected function defaultSort(Builder $query): void
+    {
+        if (empty($query->getQuery()->orders)) {
+            $query->orderByDesc($query->getModel()->getQualifiedKeyName());
+        }
+    }
+
+    protected function sortableFields(): \Illuminate\Support\Collection
+    {
+        return collect($this->columns())
+            ->filter(fn (Column $column) => $column->sortable)
+            ->map(fn (Column $column) => $column->sortField())
+            ->values();
+    }
+
+    public function render(): View
+    {
+        return view('tablewire::table.table', [
+            'columns' => $this->columns(),
+        ]);
+    }
+}

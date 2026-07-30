@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "005bea7bba24a100b142bf5a009f7a8c",
+    "content-hash": "0db32a600190ceea05c97ad6dc5c73f0",
     "packages": [
         {
             "name": "brick/math",
@@ -5867,8 +5867,8 @@
             "version": "dev-main",
             "dist": {
                 "type": "path",
-                "url": "../tablewire",
-                "reference": "772af475af0887d5d4d0a3e27061df61d8f5a082"
+                "url": "packages/tablewire",
+                "reference": "bfec6f5a4e0888678d596de90eab64ffc4bcdec5"
             },
             "require": {
                 "illuminate/support": "^10.0|^11.0|^12.0|^13.0",
@@ -5902,6 +5902,7 @@
                 "tailwind"
             ],
             "transport-options": {
+                "symlink": false,
                 "relative": true
             }
         },

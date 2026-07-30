@@ -12,9 +12,6 @@ OUT="$ROOT/dist/${NAME}-${VERSION}.zip"
 echo "→ Staging to $STAGE"
 mkdir -p "$STAGE" "$ROOT/dist"
 
-# The tablewire path repository must exist as a sibling of the staged app.
-rsync -a "$ROOT/../tablewire/" "$(dirname "$STAGE")/tablewire/" --exclude .git --exclude vendor
-
 rsync -a "$ROOT/" "$STAGE/" \
     --exclude .git \
     --exclude node_modules \
