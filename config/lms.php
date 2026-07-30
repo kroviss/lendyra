@@ -15,6 +15,7 @@ return [
         'interest_income' => ['code' => '4000', 'name' => 'Interest Income', 'type' => 'income'],
         'penalty_income' => ['code' => '4100', 'name' => 'Penalty Income', 'type' => 'income'],
         'overpayment' => ['code' => '2100', 'name' => 'Borrower Overpayments', 'type' => 'liability'],
+        'writeoff_expense' => ['code' => '5000', 'name' => 'Loan Write-off Expense', 'type' => 'expense'],
     ],
 
     /*

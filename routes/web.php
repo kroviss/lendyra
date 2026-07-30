@@ -32,7 +32,7 @@ Route::middleware('guest')->group(function () {
         $request->session()->regenerate();
 
         return redirect()->intended('/');
-    })->name('login.attempt');
+    })->middleware('throttle:5,1')->name('login.attempt');
 });
 
 Route::middleware('auth')->group(function () {
@@ -47,8 +47,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/', Dashboard::class)->name('dashboard');
 
     Route::get('/borrowers', Borrowers\Index::class)->name('borrowers.index');
-    Route::get('/borrowers/create', Borrowers\Form::class)->name('borrowers.create');
-    Route::get('/borrowers/{borrower}/edit', Borrowers\Form::class)->name('borrowers.edit');
+    Route::get('/borrowers/create', Borrowers\Form::class)->middleware('role:admin,manager,loan_officer')->name('borrowers.create');
+    Route::get('/borrowers/{borrower}/edit', Borrowers\Form::class)->middleware('role:admin,manager,loan_officer')->name('borrowers.edit');
 
     Route::middleware('role:admin,manager')->group(function () {
         Route::get('/products', Products\Index::class)->name('products.index');
@@ -57,7 +57,7 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::get('/loans', Loans\Index::class)->name('loans.index');
-    Route::get('/loans/create', Loans\Form::class)->name('loans.create');
+    Route::get('/loans/create', Loans\Form::class)->middleware('role:admin,manager,loan_officer')->name('loans.create');
     Route::get('/loans/{loan}', Loans\Show::class)->whereNumber('loan')->name('loans.show');
 
     Route::get('/loans/{loan}/statement', function (\App\Models\Loan $loan) {
@@ -65,6 +65,12 @@ Route::middleware('auth')->group(function () {
             'loan' => $loan->load(['borrower', 'installments', 'payments']),
         ]);
     })->whereNumber('loan')->name('loans.statement');
+
+    Route::middleware('role:admin')->group(function () {
+        Route::get('/users', \App\Livewire\Users\Index::class)->name('users.index');
+        Route::get('/users/create', \App\Livewire\Users\Form::class)->name('users.create');
+        Route::get('/users/{user}/edit', \App\Livewire\Users\Form::class)->name('users.edit');
+    });
 
     Route::get('/reports/portfolio', \App\Livewire\Reports\Portfolio::class)->name('reports.portfolio');
     Route::get('/reports/trial-balance', \App\Livewire\Reports\TrialBalance::class)->name('reports.trial-balance');

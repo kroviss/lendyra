@@ -7,7 +7,6 @@ use App\Models\Loan;
 use App\Models\LoanInstallment;
 use App\Models\LoanPayment;
 use Illuminate\Contracts\View\View;
-use Illuminate\Support\Facades\DB;
 use Livewire\Component;
 use LoanEngine\Money;
 
@@ -17,9 +16,19 @@ class Dashboard extends Component
     {
         $activeLoans = Loan::where('status', LoanStatus::Active)->count();
 
-        $outstandingMinor = (int) LoanInstallment::query()
-            ->whereHas('loan', fn ($q) => $q->where('status', LoanStatus::Active))
-            ->sum(DB::raw('principal_minor - principal_paid_minor'));
+        // Sums are kept per currency — minor units of different
+        // currencies must never be added together.
+        $outstandingByCurrency = [];
+
+        Loan::query()
+            ->where('status', LoanStatus::Active)
+            ->with('installments')
+            ->chunkById(200, function ($loans) use (&$outstandingByCurrency) {
+                foreach ($loans as $loan) {
+                    $outstandingByCurrency[$loan->currency] =
+                        ($outstandingByCurrency[$loan->currency] ?? 0) + $loan->principalOutstanding()->minor;
+                }
+            });
 
         $overdueCount = LoanInstallment::query()
             ->whereHas('loan', fn ($q) => $q->where('status', LoanStatus::Active))
@@ -27,16 +36,35 @@ class Dashboard extends Component
             ->whereDate('due_date', '<', today())
             ->count();
 
-        $collectedThisMonthMinor = (int) LoanPayment::query()
+        $collectedByCurrency = [];
+
+        LoanPayment::query()
             ->whereNull('reversed_at')
             ->whereBetween('paid_at', [now()->startOfMonth(), now()->endOfMonth()])
-            ->sum('amount_minor');
+            ->with('loan:id,currency')
+            ->chunkById(200, function ($payments) use (&$collectedByCurrency) {
+                foreach ($payments as $payment) {
+                    $currency = $payment->loan->currency;
+                    $collectedByCurrency[$currency] = ($collectedByCurrency[$currency] ?? 0) + (int) $payment->amount_minor;
+                }
+            });
 
         return view('livewire.dashboard', [
             'activeLoans' => $activeLoans,
-            'outstanding' => Money::minor($outstandingMinor)->toDecimalString(),
+            'outstanding' => $this->formatByCurrency($outstandingByCurrency),
             'overdueCount' => $overdueCount,
-            'collectedThisMonth' => Money::minor($collectedThisMonthMinor)->toDecimalString(),
+            'collectedThisMonth' => $this->formatByCurrency($collectedByCurrency),
         ]);
+    }
+
+    private function formatByCurrency(array $byCurrency): string
+    {
+        if ($byCurrency === []) {
+            return '0.00';
+        }
+
+        return collect($byCurrency)
+            ->map(fn (int $minor, string $currency) => Money::minor($minor, $currency)->toDecimalString().' '.$currency)
+            ->implode(' · ');
     }
 }

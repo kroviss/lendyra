@@ -85,6 +85,7 @@ class InstallController extends Controller
                 Artisan::call('key:generate', ['--force' => true]);
             }
             Artisan::call('migrate', ['--force' => true]);
+            Artisan::call('storage:link', ['--force' => true]);
         } catch (Throwable $e) {
             return back()->withInput()->withErrors(['database' => __('Migration failed: ').$e->getMessage()]);
         }

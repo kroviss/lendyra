@@ -17,6 +17,8 @@ use Throwable;
 
 class Show extends Component
 {
+    use \Livewire\WithFileUploads;
+
     #[Locked]
     public int $loanId;
 
@@ -36,6 +38,9 @@ class Show extends Component
     public string $collateralType = '';
     public string $collateralDescription = '';
     public ?float $collateralValue = null;
+
+    /** @var \Livewire\Features\SupportFileUploads\TemporaryUploadedFile[] */
+    public array $collateralPhotos = [];
 
     // Guarantor modal state
     public bool $showGuarantorModal = false;
@@ -64,6 +69,8 @@ class Show extends Component
         $loan = $this->loan();
 
         try {
+            \Illuminate\Support\Facades\Gate::authorize('activate-loans');
+
             if ($loan->status !== LoanStatus::Approved) {
                 throw new \LogicException(__('Only approved loans can be activated.'));
             }
@@ -71,6 +78,69 @@ class Show extends Component
             app(LoanScheduleService::class)->generateAndPersist($loan);
             $loan->update(['status' => LoanStatus::Active, 'disbursed_by' => auth()->id()]);
             app(\App\Services\LedgerService::class)->postDisbursement($loan);
+        } catch (Throwable $e) {
+            $this->actionError = $e->getMessage();
+        }
+    }
+
+    public function reject(): void
+    {
+        $this->actionError = null;
+
+        try {
+            \Illuminate\Support\Facades\Gate::authorize('activate-loans');
+
+            $loan = $this->loan();
+
+            if ($loan->status !== LoanStatus::Approved) {
+                throw new \LogicException(__('Only approved loans can be rejected.'));
+            }
+
+            $loan->update(['status' => LoanStatus::Rejected]);
+        } catch (Throwable $e) {
+            $this->actionError = $e->getMessage();
+        }
+    }
+
+    public function writeOff(): void
+    {
+        $this->actionError = null;
+
+        try {
+            \Illuminate\Support\Facades\Gate::authorize('write-off-loans');
+
+            $loan = $this->loan();
+
+            if ($loan->status !== LoanStatus::Active) {
+                throw new \LogicException(__('Only active loans can be written off.'));
+            }
+
+            \Illuminate\Support\Facades\DB::transaction(function () use ($loan) {
+                $remaining = $loan->principalOutstanding();
+
+                $loan->update([
+                    'status' => LoanStatus::WrittenOff,
+                    'written_off_at' => today(),
+                ]);
+
+                if ($remaining->minor > 0) {
+                    app(\App\Services\LedgerService::class)->postWriteOff($loan, $remaining);
+                }
+            });
+        } catch (Throwable $e) {
+            $this->actionError = $e->getMessage();
+        }
+    }
+
+    public function reversePayment(int $paymentId): void
+    {
+        $this->actionError = null;
+
+        try {
+            \Illuminate\Support\Facades\Gate::authorize('reverse-payments');
+
+            $payment = $this->loan()->payments()->findOrFail($paymentId);
+            app(RepaymentService::class)->reverse($payment, auth()->id());
         } catch (Throwable $e) {
             $this->actionError = $e->getMessage();
         }
@@ -101,6 +171,8 @@ class Show extends Component
         $loan = $this->loan();
 
         try {
+            \Illuminate\Support\Facades\Gate::authorize('record-payments');
+
             app(RepaymentService::class)->record(
                 $loan,
                 Money::of((string) $this->paymentAmount, $loan->currency, (int) $loan->scale),
@@ -139,6 +211,8 @@ class Show extends Component
         $this->validate(['payoffDate' => 'required|date']);
 
         try {
+            \Illuminate\Support\Facades\Gate::authorize('payoff-loans');
+
             app(PayoffService::class)->settle(
                 $this->loan(),
                 new DateTimeImmutable($this->payoffDate),
@@ -157,17 +231,23 @@ class Show extends Component
             'collateralType' => 'required|max:64',
             'collateralDescription' => 'nullable|max:2000',
             'collateralValue' => 'required|numeric|min:0',
+            'collateralPhotos.*' => 'image|max:4096',
         ]);
 
         $loan = $this->loan();
+
+        $photos = collect($this->collateralPhotos)
+            ->map(fn ($photo) => $photo->store('collaterals', 'public'))
+            ->all();
 
         $loan->collaterals()->create([
             'type' => $this->collateralType,
             'description' => $this->collateralDescription ?: null,
             'estimated_value_minor' => Money::of((string) $this->collateralValue, $loan->currency, (int) $loan->scale)->minor,
+            'photos' => $photos ?: null,
         ]);
 
-        $this->reset('showCollateralModal', 'collateralType', 'collateralDescription', 'collateralValue');
+        $this->reset('showCollateralModal', 'collateralType', 'collateralDescription', 'collateralValue', 'collateralPhotos');
     }
 
     public function releaseCollateral(int $collateralId): void

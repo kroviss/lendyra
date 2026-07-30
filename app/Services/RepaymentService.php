@@ -100,4 +100,57 @@ class RepaymentService
             return $payment;
         });
     }
+
+    /**
+     * Undo a payment completely: restore every installment's paid
+     * amounts from the allocation lines, post a mirrored ledger entry,
+     * and reopen the loan if this payment had closed it.
+     */
+    public function reverse(LoanPayment $payment, ?int $reversedBy = null): void
+    {
+        if ($payment->reversed_at !== null) {
+            throw new LogicException('Payment is already reversed.');
+        }
+
+        DB::transaction(function () use ($payment, $reversedBy) {
+            $loan = $payment->loan;
+            $installments = $loan->installments()->lockForUpdate()->get()->keyBy('id');
+
+            foreach ($payment->allocations as $allocation) {
+                /** @var LoanInstallment $installment */
+                $installment = $installments[$allocation->loan_installment_id];
+
+                $column = match ($allocation->component) {
+                    AllocationComponent::Penalty => 'penalty_paid_minor',
+                    AllocationComponent::Interest => 'interest_paid_minor',
+                    AllocationComponent::Principal => 'principal_paid_minor',
+                };
+
+                $restored = (int) $installment->{$column} - (int) $allocation->amount_minor;
+
+                if ($restored < 0) {
+                    throw new LogicException("Reversal would make installment {$installment->number} negative — data is inconsistent.");
+                }
+
+                $installment->{$column} = $restored;
+
+                if (! $installment->isSettled()) {
+                    $installment->settled_at = null;
+                }
+
+                $installment->save();
+            }
+
+            $payment->forceFill([
+                'reversed_at' => now(),
+                'reversed_by' => $reversedBy,
+            ])->save();
+
+            app(LedgerService::class)->reversePayment($payment->load('allocations', 'loan'));
+
+            if ($loan->status === LoanStatus::Closed) {
+                $loan->update(['status' => LoanStatus::Active, 'closed_at' => null]);
+            }
+        });
+    }
 }

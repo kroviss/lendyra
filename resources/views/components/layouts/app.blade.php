@@ -23,6 +23,9 @@
                     in_array(auth()->user()?->role, ['admin', 'manager'], true)
                         ? ['route' => 'products.index', 'label' => __('Loan Products')]
                         : null,
+                    auth()->user()?->role === 'admin'
+                        ? ['route' => 'users.index', 'label' => __('Users')]
+                        : null,
                 ]) as $item)
                     <a
                         href="{{ route($item['route']) }}"

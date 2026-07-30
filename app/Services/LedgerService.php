@@ -39,6 +39,50 @@ class LedgerService
      */
     public function postPayment(LoanPayment $payment): JournalEntry
     {
+        return $this->post(
+            date: $payment->paid_at->format('Y-m-d'),
+            reference: ['loan_payment', $payment->id],
+            memo: "Payment {$payment->loan->loan_number}",
+            lines: $this->paymentLines($payment),
+            currency: $payment->loan->currency,
+        );
+    }
+
+    /** Mirror image of postPayment — every debit becomes a credit and vice versa. */
+    public function reversePayment(LoanPayment $payment): JournalEntry
+    {
+        $lines = array_map(
+            fn (array $line) => ['account' => $line['account'], 'debit' => $line['credit'], 'credit' => $line['debit']],
+            $this->paymentLines($payment)
+        );
+
+        return $this->post(
+            date: now()->format('Y-m-d'),
+            reference: ['loan_payment_reversal', $payment->id],
+            memo: "Reversal of payment #{$payment->id} {$payment->loan->loan_number}",
+            lines: $lines,
+            currency: $payment->loan->currency,
+        );
+    }
+
+    /** Dr Write-off Expense / Cr Portfolio for the unrecoverable principal. */
+    public function postWriteOff(Loan $loan, \LoanEngine\Money $remainingPrincipal): JournalEntry
+    {
+        return $this->post(
+            date: now()->format('Y-m-d'),
+            reference: ['loan_write_off', $loan->id],
+            memo: "Write-off {$loan->loan_number}",
+            lines: [
+                ['account' => 'writeoff_expense', 'debit' => $remainingPrincipal->minor, 'credit' => 0],
+                ['account' => 'portfolio', 'debit' => 0, 'credit' => $remainingPrincipal->minor],
+            ],
+            currency: $loan->currency,
+        );
+    }
+
+    /** @return array<int, array{account: string, debit: int, credit: int}> */
+    private function paymentLines(LoanPayment $payment): array
+    {
         $byComponent = [
             AllocationComponent::Principal->value => 0,
             AllocationComponent::Interest->value => 0,
@@ -65,13 +109,7 @@ class LedgerService
             $lines[] = ['account' => 'overpayment', 'debit' => 0, 'credit' => (int) $payment->unallocated_minor];
         }
 
-        return $this->post(
-            date: $payment->paid_at->format('Y-m-d'),
-            reference: ['loan_payment', $payment->id],
-            memo: "Payment {$payment->loan->loan_number}",
-            lines: $lines,
-            currency: $payment->loan->currency,
-        );
+        return $lines;
     }
 
     /** @param array<int, array{account: string, debit: int, credit: int}> $lines */

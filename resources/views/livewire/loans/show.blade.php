@@ -23,10 +23,16 @@
             <a href="{{ route('loans.statement', $loan) }}" target="_blank" class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">{{ __('Statement') }}</a>
 
             @if ($loan->status === \App\Enums\LoanStatus::Approved)
-                <button wire:click="activate" wire:loading.attr="disabled"
-                    class="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-500 disabled:opacity-50">
-                    {{ __('Disburse & activate') }}
-                </button>
+                @can('activate-loans')
+                    <button wire:click="reject" wire:confirm="{{ __('Reject this loan?') }}" wire:loading.attr="disabled"
+                        class="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-50">
+                        {{ __('Reject') }}
+                    </button>
+                    <button wire:click="activate" wire:loading.attr="disabled"
+                        class="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-500 disabled:opacity-50">
+                        {{ __('Disburse & activate') }}
+                    </button>
+                @endcan
             @endif
 
             @if ($loan->status === \App\Enums\LoanStatus::Active)
@@ -34,14 +40,24 @@
                     class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
                     {{ __('Update penalties') }}
                 </button>
-                <button wire:click="$set('showPaymentModal', true)"
-                    class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500">
-                    {{ __('Record payment') }}
-                </button>
-                <button wire:click="$set('showPayoffModal', true)"
-                    class="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100">
-                    {{ __('Payoff') }}
-                </button>
+                @can('record-payments')
+                    <button wire:click="$set('showPaymentModal', true)"
+                        class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500">
+                        {{ __('Record payment') }}
+                    </button>
+                @endcan
+                @can('payoff-loans')
+                    <button wire:click="$set('showPayoffModal', true)"
+                        class="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100">
+                        {{ __('Payoff') }}
+                    </button>
+                @endcan
+                @can('write-off-loans')
+                    <button wire:click="writeOff" wire:confirm="{{ __('Write off the remaining balance? This posts a loss to the ledger and cannot be undone.') }}" wire:loading.attr="disabled"
+                        class="rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50">
+                        {{ __('Write off') }}
+                    </button>
+                @endcan
             @endif
         </div>
     </div>
@@ -125,19 +141,31 @@
                         <th class="px-4 py-3 text-left">{{ __('Method') }}</th>
                         <th class="px-4 py-3 text-left">{{ __('Reference') }}</th>
                         <th class="px-4 py-3 text-left">{{ __('Allocation') }}</th>
+                        <th class="px-4 py-3"></th>
                     </tr>
                 </thead>
                 <tbody>
                     @foreach ($loan->payments->sortByDesc('paid_at') as $payment)
-                        <tr class="border-t border-gray-100">
+                        <tr class="border-t border-gray-100 {{ $payment->reversed_at ? 'text-gray-400' : '' }}">
                             <td class="px-4 py-2">{{ $payment->paid_at->format('Y-m-d') }}</td>
-                            <td class="px-4 py-2 text-right font-medium">{{ $payment->amount()->toDecimalString() }}</td>
+                            <td class="px-4 py-2 text-right font-medium {{ $payment->reversed_at ? 'line-through' : '' }}">{{ $payment->amount()->toDecimalString() }}</td>
                             <td class="px-4 py-2">{{ $payment->method }}</td>
                             <td class="px-4 py-2">{{ $payment->reference }}</td>
                             <td class="px-4 py-2 text-xs text-gray-500">
                                 @foreach ($payment->allocations as $allocation)
                                     <span class="mr-2">#{{ $allocation->installment?->number }} {{ $allocation->component->value }}: {{ \LoanEngine\Money::minor((int) $allocation->amount_minor, $loan->currency, (int) $loan->scale)->toDecimalString() }}</span>
                                 @endforeach
+                            </td>
+                            <td class="px-4 py-2 text-right">
+                                @if ($payment->reversed_at)
+                                    <span class="inline-flex rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">{{ __('Reversed') }}</span>
+                                @else
+                                    @can('reverse-payments')
+                                        <button wire:click="reversePayment({{ $payment->id }})"
+                                            wire:confirm="{{ __('Reverse this payment? Installment balances will be restored and a reversing ledger entry posted.') }}"
+                                            class="text-xs text-gray-400 hover:text-red-600">{{ __('Reverse') }}</button>
+                                    @endcan
+                                @endif
                             </td>
                         </tr>
                     @endforeach
@@ -162,6 +190,15 @@
                             @endif
                         </p>
                         <p class="text-gray-500">{{ $collateral->description }}</p>
+                        @if ($collateral->photos)
+                            <div class="mt-1 flex gap-1.5">
+                                @foreach ($collateral->photos as $photo)
+                                    <a href="{{ asset('storage/'.$photo) }}" target="_blank">
+                                        <img src="{{ asset('storage/'.$photo) }}" class="size-10 rounded-md object-cover ring-1 ring-gray-200" alt="" />
+                                    </a>
+                                @endforeach
+                            </div>
+                        @endif
                     </div>
                     <div class="flex items-center gap-3">
                         <span class="font-medium">{{ \LoanEngine\Money::minor((int) $collateral->estimated_value_minor, $loan->currency, (int) $loan->scale)->toDecimalString() }}</span>
@@ -203,6 +240,13 @@
                     <x-tablewire::inputs.text label="{{ __('Type') }}" wire:model="collateralType" required hint="{{ __('e.g. Vehicle, Land title, Equipment') }}" />
                     <x-tablewire::inputs.money label="{{ __('Estimated value') }}" wire:model="collateralValue" required />
                     <x-tablewire::inputs.textarea label="{{ __('Description') }}" wire:model="collateralDescription" rows="2" />
+                    <div>
+                        <label class="mb-1.5 block text-sm font-medium text-gray-700">{{ __('Photos') }}</label>
+                        <input type="file" wire:model="collateralPhotos" multiple accept="image/*"
+                            class="block w-full text-sm text-gray-500 file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-indigo-700 hover:file:bg-indigo-100" />
+                        <div wire:loading wire:target="collateralPhotos" class="mt-1 text-xs text-gray-400">{{ __('Uploading...') }}</div>
+                        @error('collateralPhotos.*')<p class="mt-1 text-sm text-red-600">{{ $message }}</p>@enderror
+                    </div>
                 </div>
                 <div class="mt-6 flex justify-end gap-3">
                     <button wire:click="$set('showCollateralModal', false)" class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">{{ __('Cancel') }}</button>

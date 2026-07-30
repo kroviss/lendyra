@@ -8,7 +8,11 @@ use Livewire\Component;
 
 class Form extends Component
 {
+    use \Livewire\WithFileUploads;
+
     public ?Borrower $borrower = null;
+
+    public $photo = null;
 
     public string $first_name = '';
     public string $last_name = '';
@@ -39,12 +43,18 @@ class Form extends Component
             'id_number' => 'nullable|max:64',
             'address' => 'nullable|max:2000',
             'notes' => 'nullable|max:5000',
+            'photo' => 'nullable|image|max:2048',
         ];
     }
 
     public function save(): void
     {
         $data = $this->validate();
+        unset($data['photo']);
+
+        if ($this->photo) {
+            $data['photo_path'] = $this->photo->store('borrowers', 'public');
+        }
 
         if ($this->borrower) {
             $this->borrower->update($data);

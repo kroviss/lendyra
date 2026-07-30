@@ -15,7 +15,7 @@
         @foreach ([['label' => 'PAR 30', 'value' => $par30], ['label' => 'PAR 60', 'value' => $par60], ['label' => 'PAR 90', 'value' => $par90]] as $stat)
             <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
                 <p class="text-sm text-gray-500">{{ $stat['label'] }}</p>
-                <p class="mt-1 text-2xl font-semibold {{ $stat['value'] !== '—' && (float) $stat['value'] > 5 ? 'text-red-600' : '' }}">{{ $stat['value'] }}</p>
+                <p class="mt-1 text-xl font-semibold">{{ $stat["value"] }}</p>
             </div>
         @endforeach
     </div>
