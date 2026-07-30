@@ -44,20 +44,20 @@
             @foreach ($payment->allocations as $allocation)
                 <div class="flex justify-between text-sm">
                     <span class="text-gray-500">#{{ $allocation->installment?->number }} {{ __(ucfirst($allocation->component->value)) }}</span>
-                    <span>{{ \LoanEngine\Money::minor((int) $allocation->amount_minor, $loan->currency, (int) $loan->scale)->toDecimalString() }}</span>
+                    <span>{{ \LoanEngine\Money::minor((int) $allocation->amount_minor, $loan->currency, (int) $loan->scale)->formatted() }}</span>
                 </div>
             @endforeach
             @if ((int) $payment->unallocated_minor > 0)
                 <div class="flex justify-between text-sm">
                     <span class="text-gray-500">{{ __('Overpayment (credit)') }}</span>
-                    <span>{{ \LoanEngine\Money::minor((int) $payment->unallocated_minor, $loan->currency, (int) $loan->scale)->toDecimalString() }}</span>
+                    <span>{{ \LoanEngine\Money::minor((int) $payment->unallocated_minor, $loan->currency, (int) $loan->scale)->formatted() }}</span>
                 </div>
             @endif
         </div>
 
         <div class="flex justify-between border-t-2 border-gray-800 pt-2 text-base font-bold">
             <span>{{ __('Total') }}</span>
-            <span>{{ $payment->amount()->toDecimalString() }} {{ $loan->currency }}</span>
+            <span>{{ $payment->amount()->formatted() }} {{ $loan->currency }}</span>
         </div>
 
         <p class="mt-4 text-center text-xs text-gray-400">

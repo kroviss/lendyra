@@ -22,7 +22,13 @@
             <p>admin — {{ __('everything, incl. users') }} · manager — {{ __('approve, payoff, reverse, products') }} · loan_officer — {{ __('create borrowers & loans') }} · cashier — {{ __('record payments') }} · accountant — {{ __('view reports & ledger') }}</p>
         </div>
 
-        <div class="mt-6 flex justify-end">
+        <div class="mt-6 flex justify-end gap-3">
+            @if ($user && $user->id !== auth()->id())
+                <button type="button" wire:click="delete" wire:confirm="{{ __('Delete this user? References on historical records will be cleared.') }}"
+                    class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-red-600">
+                    {{ __('Delete') }}
+                </button>
+            @endif
             <button type="submit" wire:loading.attr="disabled"
                 class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50">
                 <span wire:loading.remove>{{ __('Save') }}</span>

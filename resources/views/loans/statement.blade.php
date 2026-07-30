@@ -38,11 +38,30 @@
             </div>
             <div>
                 <h2 class="mb-2 font-semibold text-gray-500">{{ __('Loan terms') }}</h2>
-                <p>{{ __('Principal') }}: <span class="font-medium">{{ $loan->principal()->toDecimalString() }} {{ $loan->currency }}</span></p>
+                <p>{{ __('Principal') }}: <span class="font-medium">{{ $loan->principal()->formatted() }} {{ $loan->currency }}</span></p>
                 <p>{{ __('Rate') }}: {{ $loan->annual_rate }}% / {{ __('yr') }} ({{ str_replace('_', ' ', $loan->method->value) }})</p>
                 <p>{{ __('Term') }}: {{ $loan->term_count }} × {{ $loan->frequency->value }}</p>
                 <p>{{ __('Disbursed') }}: {{ $loan->disbursed_at?->format('Y-m-d') }}</p>
                 <p>{{ __('Status') }}: {{ $loan->status->label() }}</p>
+            </div>
+        </div>
+
+        <div class="mb-8 grid grid-cols-3 gap-4 rounded-lg bg-gray-50 p-4 text-sm">
+            <div>
+                <p class="text-gray-500">{{ __('Principal outstanding') }}</p>
+                <p class="text-lg font-bold">{{ $loan->principalOutstanding()->formatted() }} {{ $loan->currency }}</p>
+            </div>
+            <div>
+                <p class="text-gray-500">{{ __('Total paid') }}</p>
+                <p class="text-lg font-bold">{{ $totalPaid->formatted() }} {{ $loan->currency }}</p>
+            </div>
+            <div>
+                <p class="text-gray-500">{{ __('Next payment') }}</p>
+                @if ($nextDue)
+                    <p class="text-lg font-bold">{{ $nextDue->toDue()->totalDue()->formatted() }} <span class="text-sm font-normal text-gray-500">{{ $nextDue->due_date->format('Y-m-d') }}</span></p>
+                @else
+                    <p class="text-lg font-bold text-green-600">{{ __('Fully paid') }}</p>
+                @endif
             </div>
         </div>
 
@@ -61,7 +80,7 @@
             </thead>
             <tbody>
                 @foreach ($loan->installments as $installment)
-                    @php $money = fn (int $minor) => \LoanEngine\Money::minor($minor, $loan->currency, (int) $loan->scale)->toDecimalString(); @endphp
+                    @php $money = fn (int $minor) => \LoanEngine\Money::minor($minor, $loan->currency, (int) $loan->scale)->formatted(); @endphp
                     <tr class="border-b border-gray-100">
                         <td class="py-1.5">{{ $installment->number }}</td>
                         <td class="py-1.5">{{ $installment->due_date->format('Y-m-d') }}</td>
@@ -69,7 +88,7 @@
                         <td class="py-1.5 text-right">{{ $money((int) $installment->interest_minor) }}</td>
                         <td class="py-1.5 text-right">{{ $money((int) $installment->penalty_minor) }}</td>
                         <td class="py-1.5 text-right">{{ $money((int) $installment->principal_paid_minor + (int) $installment->interest_paid_minor + (int) $installment->penalty_paid_minor) }}</td>
-                        <td class="py-1.5 text-right font-medium">{{ $installment->toDue()->totalDue()->toDecimalString() }}</td>
+                        <td class="py-1.5 text-right font-medium">{{ $installment->toDue()->totalDue()->formatted() }}</td>
                     </tr>
                 @endforeach
             </tbody>
@@ -92,7 +111,7 @@
                             <td class="py-1.5">{{ $payment->paid_at->format('Y-m-d') }}</td>
                             <td class="py-1.5">{{ $payment->method }}</td>
                             <td class="py-1.5">{{ $payment->reference }}</td>
-                            <td class="py-1.5 text-right font-medium">{{ $payment->amount()->toDecimalString() }} {{ $loan->currency }}</td>
+                            <td class="py-1.5 text-right font-medium">{{ $payment->amount()->formatted() }} {{ $loan->currency }}</td>
                         </tr>
                     @endforeach
                 </tbody>

@@ -51,10 +51,10 @@
                         <td class="px-4 py-2 font-medium">{{ $installment->loan->loan_number }}</td>
                         <td class="px-4 py-2">{{ $installment->loan->borrower->fullName() }}</td>
                         <td class="px-4 py-2 text-gray-500">{{ $installment->loan->borrower->phone }}</td>
-                        <td class="px-4 py-2 text-right">{{ $due->principalDue->toDecimalString() }}</td>
-                        <td class="px-4 py-2 text-right">{{ $due->interestDue->toDecimalString() }}</td>
-                        <td class="px-4 py-2 text-right">{{ $due->penaltyDue->toDecimalString() }}</td>
-                        <td class="px-4 py-2 text-right font-semibold">{{ $due->totalDue()->toDecimalString() }} {{ $installment->loan->currency }}</td>
+                        <td class="px-4 py-2 text-right">{{ $due->principalDue->formatted() }}</td>
+                        <td class="px-4 py-2 text-right">{{ $due->interestDue->formatted() }}</td>
+                        <td class="px-4 py-2 text-right">{{ $due->penaltyDue->formatted() }}</td>
+                        <td class="px-4 py-2 text-right font-semibold">{{ $due->totalDue()->formatted() }} {{ $installment->loan->currency }}</td>
                     </tr>
                 @empty
                     <tr><td colspan="8" class="px-4 py-10 text-center text-gray-400">{{ __('Nothing due in this window — all caught up!') }}</td></tr>

@@ -47,7 +47,8 @@ class Collections extends Component
 
         $query = LoanInstallment::query()
             ->whereNull('settled_at')
-            ->whereHas('loan', fn ($q) => $q->where('status', LoanStatus::Active))
+            ->whereHas('loan', fn ($q) => $q->where('status', LoanStatus::Active)
+                ->when(auth()->user()?->scopedBranchId(), fn ($l, $branch) => $l->where('branch_id', $branch)))
             ->with(['loan.borrower'])
             ->when($from, fn ($q) => $q->whereDate('due_date', '>=', $from))
             ->whereDate('due_date', '<=', $to)
@@ -83,7 +84,7 @@ class Collections extends Component
         $totalLabel = $totals === []
             ? '0.00'
             : collect($totals)
-                ->map(fn (int $minor, string $currency) => Money::minor($minor, $currency)->toDecimalString().' '.$currency)
+                ->map(fn (int $minor, string $currency) => Money::minor($minor, $currency)->formatted().' '.$currency)
                 ->implode(' · ');
 
         return view('livewire.reports.collections', [

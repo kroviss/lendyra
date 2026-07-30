@@ -22,6 +22,16 @@ class User extends Authenticatable
         return $this->belongsTo(Branch::class);
     }
 
+    /** Branch the current user is restricted to, or null for full visibility. */
+    public function scopedBranchId(): ?int
+    {
+        if (! config('lms.branch_scoping') || in_array($this->role, ['admin', 'manager'], true)) {
+            return null;
+        }
+
+        return $this->branch_id;
+    }
+
     /**
      * Get the attributes that should be cast.
      *

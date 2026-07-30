@@ -29,7 +29,7 @@ class SendReminders extends Command
             kind: 'upcoming',
             dueDate: $today->copy()->addDays($daysBefore)->format('Y-m-d'),
             template: fn ($i, $due) => __('Reminder: installment of :amount for loan :loan is due on :date.', [
-                'amount' => $due->totalDue()->toDecimalString(),
+                'amount' => $due->totalDue()->formatted(),
                 'loan' => $i->loan->loan_number,
                 'date' => $i->due_date->format('Y-m-d'),
             ]),
@@ -42,7 +42,7 @@ class SendReminders extends Command
             kind: 'overdue',
             dueDate: $today->format('Y-m-d'),
             template: fn ($i, $due) => __('OVERDUE: :amount for loan :loan was due :date. Please pay to avoid further penalties.', [
-                'amount' => $due->totalDue()->toDecimalString(),
+                'amount' => $due->totalDue()->formatted(),
                 'loan' => $i->loan->loan_number,
                 'date' => $i->due_date->format('Y-m-d'),
             ]),
@@ -112,9 +112,6 @@ class SendReminders extends Command
 
     private function sender(): SmsSender
     {
-        return match (config('lms.sms.driver', 'log')) {
-            'http' => new HttpSms,
-            default => new LogSms,
-        };
+        return \App\Services\Sms\SmsFactory::make();
     }
 }

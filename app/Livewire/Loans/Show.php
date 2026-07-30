@@ -43,6 +43,9 @@ class Show extends Component
     /** @var \Livewire\Features\SupportFileUploads\TemporaryUploadedFile[] */
     public array $collateralPhotos = [];
 
+    public ?int $editingCollateralId = null;
+    public ?int $editingGuarantorId = null;
+
     // Guarantor modal state
     public bool $showGuarantorModal = false;
     public string $guarantorName = '';
@@ -126,9 +129,17 @@ class Show extends Component
         $this->actionError = null;
 
         try {
-            \Illuminate\Support\Facades\Gate::authorize('activate-loans');
-
             $loan = $this->loan();
+
+            // The maker may withdraw their own application while it is
+            // still pending; anything else needs approval rights.
+            $isOwnPending = $loan->status === LoanStatus::PendingApproval
+                && (int) $loan->created_by === (int) auth()->id()
+                && \Illuminate\Support\Facades\Gate::allows('create-loans');
+
+            if (! $isOwnPending) {
+                \Illuminate\Support\Facades\Gate::authorize('activate-loans');
+            }
 
             if (! in_array($loan->status, [LoanStatus::Draft, LoanStatus::PendingApproval, LoanStatus::Approved, LoanStatus::Rejected], true)) {
                 throw new \LogicException(__('Only loans that were never disbursed can be deleted.'));
@@ -169,7 +180,7 @@ class Show extends Component
                 $loan->update(['status' => LoanStatus::Closed, 'closed_at' => today()]);
             }
 
-            $this->dispatch('toast', message: __('Penalty of :amount waived', ['amount' => $waived->toDecimalString()]));
+            $this->dispatch('toast', message: __('Penalty of :amount waived', ['amount' => $waived->formatted()]));
         } catch (Throwable $e) {
             $this->actionError = $e->getMessage();
         }
@@ -268,7 +279,7 @@ class Show extends Component
             $delta = $this->loan()->installments->sum('penalty_minor') - $before;
 
             $this->dispatch('toast', message: $delta > 0
-                ? __('Penalties updated (+:amount)', ['amount' => Money::minor((int) $delta, $this->loan()->currency, (int) $this->loan()->scale)->toDecimalString()])
+                ? __('Penalties updated (+:amount)', ['amount' => Money::minor((int) $delta, $this->loan()->currency, (int) $this->loan()->scale)->formatted()])
                 : __('Penalties are up to date'));
         } catch (Throwable $e) {
             $this->actionError = $e->getMessage();
@@ -313,11 +324,11 @@ class Show extends Component
             $quote = app(PayoffService::class)->quote($this->loan(), new DateTimeImmutable($this->payoffDate));
 
             return [
-                'principal' => $quote->principalOutstanding->toDecimalString(),
-                'pastDueInterest' => $quote->pastDueInterest->toDecimalString(),
-                'accruedInterest' => $quote->accruedInterest->toDecimalString(),
-                'penalty' => $quote->penalty->toDecimalString(),
-                'total' => $quote->total()->toDecimalString(),
+                'principal' => $quote->principalOutstanding->formatted(),
+                'pastDueInterest' => $quote->pastDueInterest->formatted(),
+                'accruedInterest' => $quote->accruedInterest->formatted(),
+                'penalty' => $quote->penalty->formatted(),
+                'total' => $quote->total()->formatted(),
             ];
         } catch (Throwable $e) {
             report($e);
@@ -368,26 +379,74 @@ class Show extends Component
             ->map(fn ($photo) => $photo->store('collaterals', 'public'))
             ->all();
 
-        $loan->collaterals()->create([
-            'type' => $this->collateralType,
-            'description' => $this->collateralDescription ?: null,
-            'estimated_value_minor' => Money::of((string) $this->collateralValue, $loan->currency, (int) $loan->scale)->minor,
-            'photos' => $photos ?: null,
-        ]);
+        if ($this->editingCollateralId) {
+            $collateral = $loan->collaterals()->findOrFail($this->editingCollateralId);
+            $collateral->update([
+                'type' => $this->collateralType,
+                'description' => $this->collateralDescription ?: null,
+                'estimated_value_minor' => Money::of((string) $this->collateralValue, $loan->currency, (int) $loan->scale)->minor,
+                'photos' => array_merge($collateral->photos ?? [], $photos) ?: null,
+            ]);
+            $message = __('Collateral updated');
+        } else {
+            $loan->collaterals()->create([
+                'type' => $this->collateralType,
+                'description' => $this->collateralDescription ?: null,
+                'estimated_value_minor' => Money::of((string) $this->collateralValue, $loan->currency, (int) $loan->scale)->minor,
+                'photos' => $photos ?: null,
+            ]);
+            $message = __('Collateral added');
+        }
 
-        $this->reset('showCollateralModal', 'collateralType', 'collateralDescription', 'collateralValue', 'collateralPhotos');
-        $this->dispatch('toast', message: __('Collateral added'));
+        $this->reset('showCollateralModal', 'collateralType', 'collateralDescription', 'collateralValue', 'collateralPhotos', 'editingCollateralId');
+        $this->dispatch('toast', message: $message);
     }
 
     public function releaseCollateral(int $collateralId): void
     {
-        \Illuminate\Support\Facades\Gate::authorize('create-loans');
+        // Releasing security on a live loan is a management decision.
+        \Illuminate\Support\Facades\Gate::authorize('write-off-loans');
 
         $this->loan()->collaterals()
             ->whereKey($collateralId)
             ->update(['status' => 'released', 'released_at' => today()]);
 
         $this->dispatch('toast', message: __('Collateral released'));
+    }
+
+    public function editCollateral(int $collateralId): void
+    {
+        \Illuminate\Support\Facades\Gate::authorize('create-loans');
+
+        $collateral = $this->loan()->collaterals()->findOrFail($collateralId);
+
+        $this->editingCollateralId = $collateral->id;
+        $this->collateralType = $collateral->type;
+        $this->collateralDescription = (string) ($collateral->description ?? '');
+        $this->collateralValue = (float) \LoanEngine\Money::minor((int) $collateral->estimated_value_minor, $this->loan()->currency, (int) $this->loan()->scale)->toDecimalString();
+        $this->showCollateralModal = true;
+    }
+
+    public function deleteCollateral(int $collateralId): void
+    {
+        \Illuminate\Support\Facades\Gate::authorize('write-off-loans');
+
+        $this->loan()->collaterals()->whereKey($collateralId)->delete();
+
+        $this->dispatch('toast', message: __('Collateral deleted'));
+    }
+
+    public function editGuarantor(int $guarantorId): void
+    {
+        \Illuminate\Support\Facades\Gate::authorize('create-loans');
+
+        $guarantor = $this->loan()->guarantors()->findOrFail($guarantorId);
+
+        $this->editingGuarantorId = $guarantor->id;
+        $this->guarantorName = $guarantor->name;
+        $this->guarantorPhone = (string) ($guarantor->phone ?? '');
+        $this->guarantorIdNumber = (string) ($guarantor->id_number ?? '');
+        $this->showGuarantorModal = true;
     }
 
     public function addGuarantor(): void
@@ -400,14 +459,24 @@ class Show extends Component
             'guarantorIdNumber' => 'nullable|max:64',
         ]);
 
-        $this->loan()->guarantors()->create([
-            'name' => $this->guarantorName,
-            'phone' => $this->guarantorPhone ?: null,
-            'id_number' => $this->guarantorIdNumber ?: null,
-        ]);
+        if ($this->editingGuarantorId) {
+            $this->loan()->guarantors()->whereKey($this->editingGuarantorId)->update([
+                'name' => $this->guarantorName,
+                'phone' => $this->guarantorPhone ?: null,
+                'id_number' => $this->guarantorIdNumber ?: null,
+            ]);
+            $message = __('Guarantor updated');
+        } else {
+            $this->loan()->guarantors()->create([
+                'name' => $this->guarantorName,
+                'phone' => $this->guarantorPhone ?: null,
+                'id_number' => $this->guarantorIdNumber ?: null,
+            ]);
+            $message = __('Guarantor added');
+        }
 
-        $this->reset('showGuarantorModal', 'guarantorName', 'guarantorPhone', 'guarantorIdNumber');
-        $this->dispatch('toast', message: __('Guarantor added'));
+        $this->reset('showGuarantorModal', 'guarantorName', 'guarantorPhone', 'guarantorIdNumber', 'editingGuarantorId');
+        $this->dispatch('toast', message: $message);
     }
 
     public function removeGuarantor(int $guarantorId): void

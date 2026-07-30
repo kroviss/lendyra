@@ -12,7 +12,9 @@ class Index extends BaseTable
 {
     protected function query(): Builder
     {
-        return Borrower::query()->withCount('loans');
+        return Borrower::query()
+            ->withCount('loans')
+            ->when(auth()->user()?->scopedBranchId(), fn (Builder $q, int $branch) => $q->where('branch_id', $branch));
     }
 
     protected function columns(): array

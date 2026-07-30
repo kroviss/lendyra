@@ -96,6 +96,26 @@ class Form extends Component
         $this->redirectRoute('products.index');
     }
 
+    public function delete(): void
+    {
+        \Illuminate\Support\Facades\Gate::authorize('manage-products');
+
+        if (! $this->product) {
+            return;
+        }
+
+        if ($this->product->loans()->withTrashed()->exists()) {
+            $this->addError('name', __('Cannot delete: loans exist for this product. Deactivate it instead.'));
+
+            return;
+        }
+
+        $this->product->delete();
+
+        session()->flash('status', __('Product deleted'));
+        $this->redirectRoute('products.index');
+    }
+
     public function render(): View
     {
         return view('livewire.products.form', [

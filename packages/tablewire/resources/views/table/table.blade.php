@@ -29,6 +29,13 @@
                 </div>
             @endif
 
+            <button
+                type="button"
+                wire:click="exportCsv"
+                wire:loading.attr="disabled"
+                class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50"
+            >{{ __('Export CSV') }}</button>
+
             <select
                 wire:model.live="perPage"
                 class="rounded-lg border border-gray-300 bg-white py-2 pl-3 pr-8 text-sm text-gray-700 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"

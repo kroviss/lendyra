@@ -36,6 +36,7 @@ class Index extends BaseTable
     {
         return LoanPayment::query()
             ->with(['loan.borrower', 'receivedBy'])
+            ->when(auth()->user()?->scopedBranchId(), fn (Builder $q, int $branch) => $q->whereHas('loan', fn ($l) => $l->where('branch_id', $branch)))
             ->when($this->methodFilter !== '', fn (Builder $q) => $q->where('method', $this->methodFilter))
             ->when($this->from !== '', fn (Builder $q) => $q->whereDate('paid_at', '>=', $this->from))
             ->when($this->to !== '', fn (Builder $q) => $q->whereDate('paid_at', '<=', $this->to));
@@ -56,7 +57,7 @@ class Index extends BaseTable
             Column::make('amount_minor', __('Amount'))
                 ->right()
                 ->sortable()
-                ->format(fn ($value, $row) => Money::minor((int) $value, $row->loan?->currency ?? 'USD', (int) ($row->loan?->scale ?? 2))->toDecimalString()
+                ->format(fn ($value, $row) => Money::minor((int) $value, $row->loan?->currency ?? 'USD', (int) ($row->loan?->scale ?? 2))->formatted()
                     .' '.($row->loan?->currency ?? '')),
             Column::make('reversed_at', __('Status'))->center()->format(
                 fn ($value) => $value
@@ -71,6 +72,12 @@ class Index extends BaseTable
             ]),
             Column::make('reference', __('Reference'))->searchable(),
             Column::make('receivedBy.name', __('Received by')),
+            Column::make('id', __(''))->center()->format(
+                fn ($value, $row) => $row->loan
+                    ? '<a href="'.route('loans.receipt', [$row->loan_id, $value]).'" target="_blank" onclick="event.stopPropagation()" class="text-xs text-indigo-600 hover:underline">'.e(__('Receipt')).'</a>'
+                    : '',
+                html: true
+            ),
         ];
     }
 
@@ -107,7 +114,7 @@ class Index extends BaseTable
         }
 
         $format = fn (array $sums) => collect($sums)
-            ->map(fn (int $minor, string $currency) => Money::minor($minor, $currency)->toDecimalString().' '.$currency)
+            ->map(fn (int $minor, string $currency) => Money::minor($minor, $currency)->formatted().' '.$currency)
             ->implode(' · ');
 
         return view('livewire.payments.index', [

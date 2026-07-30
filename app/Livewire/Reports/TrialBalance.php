@@ -41,9 +41,9 @@ class TrialBalance extends Component
                     'code' => $account->code,
                     'name' => $account->name.($lines->count() > 1 ? ' ('.$line->currency.')' : ''),
                     'type' => $account->type,
-                    'debits' => Money::minor($debits, $line->currency)->toDecimalString(),
-                    'credits' => Money::minor($credits, $line->currency)->toDecimalString(),
-                    'balance' => Money::minor(abs($net), $line->currency)->toDecimalString().($net < 0 ? ' Cr' : ($net > 0 ? ' Dr' : '')),
+                    'debits' => Money::minor($debits, $line->currency)->formatted(),
+                    'credits' => Money::minor($credits, $line->currency)->formatted(),
+                    'balance' => Money::minor(abs($net), $line->currency)->formatted().($net < 0 ? ' Cr' : ($net > 0 ? ' Dr' : '')),
                 ];
             }
         }
@@ -57,7 +57,7 @@ class TrialBalance extends Component
         $balanced = $currencyTotals->every(fn ($t) => (int) $t->debits === (int) $t->credits);
 
         $format = fn (string $column) => $currencyTotals
-            ->map(fn ($t) => Money::minor((int) $t->{$column}, $t->currency)->toDecimalString().' '.$t->currency)
+            ->map(fn ($t) => Money::minor((int) $t->{$column}, $t->currency)->formatted().' '.$t->currency)
             ->implode(' · ');
 
         return view('livewire.reports.trial-balance', [

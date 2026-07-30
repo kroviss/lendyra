@@ -98,6 +98,18 @@ final class Money
             && $this->scale === $other->scale;
     }
 
+    /** Human display form with thousands separators: "1,234,567.89". */
+    public function formatted(): string
+    {
+        $abs = abs($this->minor);
+        $divisor = 10 ** $this->scale;
+        $whole = number_format(intdiv($abs, $divisor));
+        $fraction = str_pad((string) ($abs % $divisor), $this->scale, '0', STR_PAD_LEFT);
+        $sign = $this->minor < 0 ? '-' : '';
+
+        return $this->scale > 0 ? "{$sign}{$whole}.{$fraction}" : "{$sign}{$whole}";
+    }
+
     public function toDecimalString(): string
     {
         $abs = abs($this->minor);

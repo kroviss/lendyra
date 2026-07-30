@@ -19,6 +19,44 @@ Route::prefix('install')->middleware('throttle:20,1')->controller(\App\Http\Cont
 Route::middleware('guest')->group(function () {
     Route::get('/login', fn () => view('auth.login'))->name('login');
 
+    Route::get('/forgot-password', fn () => view('auth.forgot-password'))->name('password.request');
+
+    Route::post('/forgot-password', function (Request $request) {
+        $request->validate(['email' => 'required|email']);
+
+        \Illuminate\Support\Facades\Password::sendResetLink($request->only('email'));
+
+        // Same response either way — never confirm whether an email exists.
+        return back()->with('status', __('If that email exists, a reset link has been sent.'));
+    })->middleware('throttle:5,1')->name('password.email');
+
+    Route::get('/reset-password/{token}', fn (string $token) => view('auth.reset-password', [
+        'token' => $token,
+        'email' => request('email', ''),
+    ]))->name('password.reset');
+
+    Route::post('/reset-password', function (Request $request) {
+        $request->validate([
+            'token' => 'required',
+            'email' => 'required|email',
+            'password' => 'required|min:8|confirmed',
+        ]);
+
+        $status = \Illuminate\Support\Facades\Password::reset(
+            $request->only('email', 'password', 'password_confirmation', 'token'),
+            function ($user, string $password) {
+                $user->forceFill([
+                    'password' => \Illuminate\Support\Facades\Hash::make($password),
+                    'remember_token' => \Illuminate\Support\Str::random(60),
+                ])->save();
+            }
+        );
+
+        return $status === \Illuminate\Support\Facades\Password::PASSWORD_RESET
+            ? redirect()->route('login')->with('status', __('Password reset — you can log in now.'))
+            : back()->withErrors(['email' => __($status)]);
+    })->middleware('throttle:5,1')->name('password.update');
+
     Route::post('/login', function (Request $request) {
         $credentials = $request->validate([
             'email' => 'required|email',
@@ -75,6 +113,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/payments', \App\Livewire\Payments\Index::class)->name('payments.index');
 
     Route::get('/collaterals', \App\Livewire\Collaterals\Index::class)->name('collaterals.index');
+    Route::get('/guarantors', \App\Livewire\Guarantors\Index::class)->name('guarantors.index');
 
     Route::get('/loans/{loan}/payments/{payment}/receipt', function (\App\Models\Loan $loan, int $payment) {
         return view('loans.receipt', [
@@ -84,8 +123,17 @@ Route::middleware('auth')->group(function () {
     })->whereNumber('loan')->whereNumber('payment')->name('loans.receipt');
 
     Route::get('/loans/{loan}/statement', function (\App\Models\Loan $loan) {
+        $loan->load(['borrower', 'installments', 'payments']);
+
+        $nextDue = $loan->installments->first(fn ($i) => ! $i->isSettled());
+
         return view('loans.statement', [
-            'loan' => $loan->load(['borrower', 'installments', 'payments']),
+            'loan' => $loan,
+            'totalPaid' => \LoanEngine\Money::minor(
+                (int) $loan->payments->whereNull('reversed_at')->sum('amount_minor'),
+                $loan->currency, (int) $loan->scale
+            ),
+            'nextDue' => $nextDue,
         ]);
     })->whereNumber('loan')->name('loans.statement');
 

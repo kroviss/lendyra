@@ -20,6 +20,9 @@
             <a href="{{ route('borrowers.index') }}" class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">← {{ __('Back') }}</a>
             @can('create-loans')
                 <a href="{{ route('borrowers.edit', $borrower->id) }}" class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">{{ __('Edit') }}</a>
+                @if ($borrower->loans->isEmpty())
+                    <button wire:click="deleteBorrower" wire:confirm="{{ __('Delete this borrower?') }}" class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-red-600">{{ __('Delete') }}</button>
+                @endif
                 <a href="{{ route('loans.create', ['borrower' => $borrower->id]) }}" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500">{{ __('New loan') }}</a>
             @endcan
         </div>
@@ -70,8 +73,8 @@
                         x-on:click="window.location = '{{ route('loans.show', $loan) }}'">
                         <td class="px-4 py-2 font-medium">{{ $loan->loan_number }}</td>
                         <td class="px-4 py-2">{{ $loan->product?->name }}</td>
-                        <td class="px-4 py-2 text-right">{{ $loan->principal()->toDecimalString() }} {{ $loan->currency }}</td>
-                        <td class="px-4 py-2 text-right">{{ $loan->principalOutstanding()->toDecimalString() }}</td>
+                        <td class="px-4 py-2 text-right">{{ $loan->principal()->formatted() }} {{ $loan->currency }}</td>
+                        <td class="px-4 py-2 text-right">{{ $loan->principalOutstanding()->formatted() }}</td>
                         <td class="px-4 py-2">{{ $loan->disbursed_at?->format('Y-m-d') }}</td>
                         <td class="px-4 py-2 text-center">
                             <span class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium {{ $loan->status->badgeClass() }}">{{ $loan->status->label() }}</span>

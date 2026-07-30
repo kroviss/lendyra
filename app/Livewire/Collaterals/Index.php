@@ -29,7 +29,7 @@ class Index extends BaseTable
     protected function query(): Builder
     {
         return Collateral::query()
-            ->whereHas('loan')
+            ->whereHas('loan', fn ($l) => $l->when(auth()->user()?->scopedBranchId(), fn ($q, $branch) => $q->where('branch_id', $branch)))
             ->with(['loan.borrower'])
             ->when($this->statusFilter !== '', fn (Builder $q) => $q->where('status', $this->statusFilter));
     }
@@ -50,7 +50,7 @@ class Index extends BaseTable
             Column::make('estimated_value_minor', __('Est. value'))
                 ->right()
                 ->sortable()
-                ->format(fn ($value, $row) => Money::minor((int) $value, $row->loan?->currency ?? 'USD', (int) ($row->loan?->scale ?? 2))->toDecimalString().' '.($row->loan?->currency ?? '')),
+                ->format(fn ($value, $row) => Money::minor((int) $value, $row->loan?->currency ?? 'USD', (int) ($row->loan?->scale ?? 2))->formatted().' '.($row->loan?->currency ?? '')),
             Column::make('status', __('Status'))->center()->sortable()->badge([
                 'held' => ['label' => __('Held'), 'class' => 'bg-green-100 text-green-700'],
                 'released' => ['label' => __('Released'), 'class' => 'bg-gray-100 text-gray-600'],

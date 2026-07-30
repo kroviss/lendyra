@@ -212,6 +212,37 @@ abstract class BaseTable extends Component
             ->values();
     }
 
+    /** Stream the CURRENT filtered+sorted view as CSV (Excel-friendly BOM). */
+    public function exportCsv(): \Symfony\Component\HttpFoundation\StreamedResponse
+    {
+        $query = $this->query();
+        $this->applySearch($query);
+        $this->applySort($query);
+
+        $columns = collect($this->columns());
+        $filename = \Illuminate\Support\Str::kebab(class_basename(static::class) === 'Index'
+            ? class_basename(dirname(str_replace('\\', '/', static::class)))
+            : class_basename(static::class)).'-'.now()->format('Ymd-His').'.csv';
+
+        return response()->streamDownload(function () use ($query, $columns) {
+            $out = fopen('php://output', 'w');
+            fwrite($out, "\xEF\xBB\xBF");
+            fputcsv($out, $columns->map(fn (Column $c) => $c->label)->all());
+
+            $query->chunk(500, function ($rows) use ($out, $columns) {
+                foreach ($rows as $row) {
+                    fputcsv($out, $columns->map(function (Column $c) use ($row) {
+                        $value = $c->render($row);
+
+                        return $c->html ? trim(strip_tags((string) $value)) : (string) $value;
+                    })->all());
+                }
+            });
+
+            fclose($out);
+        }, $filename);
+    }
+
     public function render(): View
     {
         return view('tablewire::table.table', [

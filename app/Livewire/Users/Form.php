@@ -83,6 +83,39 @@ class Form extends Component
         $this->redirectRoute('users.index');
     }
 
+    public function delete(): void
+    {
+        \Illuminate\Support\Facades\Gate::authorize('manage-users');
+
+        if (config('lms.demo')) {
+            $this->addError('name', __('Account changes are disabled in demo mode.'));
+
+            return;
+        }
+
+        if (! $this->user) {
+            return;
+        }
+
+        if ($this->user->id === auth()->id()) {
+            $this->addError('name', __('You cannot delete your own account.'));
+
+            return;
+        }
+
+        if ($this->user->role === 'admin'
+            && User::where('role', 'admin')->where('is_active', true)->count() === 1) {
+            $this->addError('name', __('Cannot delete the last active admin.'));
+
+            return;
+        }
+
+        $this->user->delete();
+
+        session()->flash('status', __('User deleted'));
+        $this->redirectRoute('users.index');
+    }
+
     public function render(): View
     {
         return view('livewire.users.form', [

@@ -19,6 +19,24 @@ class Show extends Component
         $this->borrowerId = $borrower;
     }
 
+    public function deleteBorrower(): void
+    {
+        \Illuminate\Support\Facades\Gate::authorize('create-loans');
+
+        $borrower = Borrower::findOrFail($this->borrowerId);
+
+        if ($borrower->loans()->withTrashed()->exists()) {
+            $this->dispatch('toast', message: __('Cannot delete: this borrower has loan history.'));
+
+            return;
+        }
+
+        $borrower->delete();
+
+        session()->flash('status', __('Borrower deleted'));
+        $this->redirectRoute('borrowers.index');
+    }
+
     public function render(): View
     {
         $borrower = Borrower::with(['loans.product', 'loans.installments'])
@@ -32,7 +50,7 @@ class Show extends Component
         $outstandingLabel = $outstanding === []
             ? '0.00'
             : collect($outstanding)
-                ->map(fn (int $minor, string $currency) => Money::minor($minor, $currency)->toDecimalString().' '.$currency)
+                ->map(fn (int $minor, string $currency) => Money::minor($minor, $currency)->formatted().' '.$currency)
                 ->implode(' · ');
 
         return view('livewire.borrowers.show', [

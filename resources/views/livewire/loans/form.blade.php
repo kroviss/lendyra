@@ -57,11 +57,11 @@
                 <div class="mb-4 grid grid-cols-2 gap-3 text-sm">
                     <div class="rounded-lg bg-gray-50 p-3">
                         <p class="text-gray-500">{{ __('Total interest') }}</p>
-                        <p class="text-lg font-semibold">{{ $schedule->totalInterest()->toDecimalString() }}</p>
+                        <p class="text-lg font-semibold">{{ $schedule->totalInterest()->formatted() }}</p>
                     </div>
                     <div class="rounded-lg bg-gray-50 p-3">
                         <p class="text-gray-500">{{ __('Total payable') }}</p>
-                        <p class="text-lg font-semibold">{{ $schedule->totalPayable()->toDecimalString() }}</p>
+                        <p class="text-lg font-semibold">{{ $schedule->totalPayable()->formatted() }}</p>
                     </div>
                 </div>
 
@@ -81,9 +81,9 @@
                                 <tr class="border-t border-gray-100">
                                     <td class="px-3 py-1.5">{{ $installment->number }}</td>
                                     <td class="px-3 py-1.5">{{ $installment->dueDate->format('Y-m-d') }}</td>
-                                    <td class="px-3 py-1.5 text-right">{{ $installment->principal->toDecimalString() }}</td>
-                                    <td class="px-3 py-1.5 text-right">{{ $installment->interest->toDecimalString() }}</td>
-                                    <td class="px-3 py-1.5 text-right font-medium">{{ $installment->total()->toDecimalString() }}</td>
+                                    <td class="px-3 py-1.5 text-right">{{ $installment->principal->formatted() }}</td>
+                                    <td class="px-3 py-1.5 text-right">{{ $installment->interest->formatted() }}</td>
+                                    <td class="px-3 py-1.5 text-right font-medium">{{ $installment->total()->formatted() }}</td>
                                 </tr>
                             @endforeach
                         </tbody>

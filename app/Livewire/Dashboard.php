@@ -84,7 +84,7 @@ class Dashboard extends Component
         $chartMax = max(1, max($chart));
         $chartBars = collect($chart)->map(fn (int $minor, string $label) => [
             'label' => $label,
-            'value' => Money::minor($minor, $primaryCurrency)->toDecimalString(),
+            'value' => Money::minor($minor, $primaryCurrency)->formatted(),
             'height' => (int) round($minor / $chartMax * 100),
         ])->values()->all();
 
@@ -108,7 +108,7 @@ class Dashboard extends Component
         }
 
         return collect($byCurrency)
-            ->map(fn (int $minor, string $currency) => Money::minor($minor, $currency)->toDecimalString().' '.$currency)
+            ->map(fn (int $minor, string $currency) => Money::minor($minor, $currency)->formatted().' '.$currency)
             ->implode(' · ');
     }
 }

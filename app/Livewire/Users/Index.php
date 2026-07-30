@@ -10,9 +10,31 @@ use TableWire\Table\Column;
 
 class Index extends BaseTable
 {
+    public string $roleFilter = '';
+    public string $activeFilter = '';
+
+    protected function queryString(): array
+    {
+        return parent::queryString() + [
+            'roleFilter' => ['except' => '', 'as' => 'role'],
+            'activeFilter' => ['except' => '', 'as' => 'active'],
+        ];
+    }
+
+    public function updated($property): void
+    {
+        if (in_array($property, ['roleFilter', 'activeFilter'], true)) {
+            $this->resetPage();
+            $this->clearSelection();
+        }
+    }
+
     protected function query(): Builder
     {
-        return User::query()->with('branch');
+        return User::query()
+            ->with('branch')
+            ->when($this->roleFilter !== '', fn (Builder $q) => $q->where('role', $this->roleFilter))
+            ->when($this->activeFilter !== '', fn (Builder $q) => $q->where('is_active', $this->activeFilter === '1'));
     }
 
     protected function columns(): array

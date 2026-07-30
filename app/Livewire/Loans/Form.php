@@ -112,7 +112,7 @@ class Form extends Component
         $fee = $product ? $this->feeMinor($product) : 0;
 
         return $fee > 0
-            ? Money::minor($fee, $product->currency, (int) $product->scale)->toDecimalString().' '.$product->currency
+            ? Money::minor($fee, $product->currency, (int) $product->scale)->formatted().' '.$product->currency
             : null;
     }
 

@@ -7,10 +7,10 @@
             </div>
             <p class="mt-1 text-sm text-gray-500">
                 {{ $loan->borrower->fullName() }} · {{ $loan->product->name }} ·
-                {{ $loan->principal()->toDecimalString() }} {{ $loan->currency }} ·
+                {{ $loan->principal()->formatted() }} {{ $loan->currency }} ·
                 {{ $loan->annual_rate }}%/{{ __('yr') }} · {{ $loan->term_count }} {{ $loan->frequency->value }}
                 @if ((int) $loan->fee_minor > 0)
-                    · {{ __('fee') }} {{ \LoanEngine\Money::minor((int) $loan->fee_minor, $loan->currency, (int) $loan->scale)->toDecimalString() }}
+                    · {{ __('fee') }} {{ \LoanEngine\Money::minor((int) $loan->fee_minor, $loan->currency, (int) $loan->scale)->formatted() }}
                 @endif
             </p>
         </div>
@@ -40,13 +40,18 @@
                 @endcan
             @endif
 
-            @if (in_array($loan->status, [\App\Enums\LoanStatus::PendingApproval, \App\Enums\LoanStatus::Approved, \App\Enums\LoanStatus::Rejected], true))
-                @can('activate-loans')
-                    <button wire:click="deleteLoan" wire:confirm="{{ __('Delete this loan application? This cannot be undone.') }}" wire:loading.attr="disabled"
-                        class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-red-600 disabled:opacity-50">
-                        {{ __('Delete') }}
-                    </button>
-                @endcan
+            @php
+                $canDeleteLoan = in_array($loan->status, [\App\Enums\LoanStatus::PendingApproval, \App\Enums\LoanStatus::Approved, \App\Enums\LoanStatus::Rejected], true)
+                    && (auth()->user()->can('activate-loans')
+                        || ($loan->status === \App\Enums\LoanStatus::PendingApproval
+                            && (int) $loan->created_by === (int) auth()->id()
+                            && auth()->user()->can('create-loans')));
+            @endphp
+            @if ($canDeleteLoan)
+                <button wire:click="deleteLoan" wire:confirm="{{ __('Delete this loan application? This cannot be undone.') }}" wire:loading.attr="disabled"
+                    class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-red-600 disabled:opacity-50">
+                    {{ __('Delete') }}
+                </button>
             @endif
 
             @if ($loan->status === \App\Enums\LoanStatus::Approved)
@@ -107,7 +112,7 @@
         <div class="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
             <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
                 <p class="text-sm text-gray-500">{{ __('Principal outstanding') }}</p>
-                <p class="mt-1 text-xl font-semibold">{{ $loan->principalOutstanding()->toDecimalString() }}</p>
+                <p class="mt-1 text-xl font-semibold">{{ $loan->principalOutstanding()->formatted() }}</p>
             </div>
             <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
                 <p class="text-sm text-gray-500">{{ __('Overdue installments') }}</p>
@@ -143,10 +148,10 @@
                     <tr class="border-t border-gray-100 {{ ! $installment->isSettled() && $installment->due_date->isPast() ? 'bg-red-50/50' : '' }}">
                         <td class="px-4 py-2">{{ $installment->number }}</td>
                         <td class="px-4 py-2">{{ $installment->due_date->format('Y-m-d') }}</td>
-                        <td class="px-4 py-2 text-right">{{ \LoanEngine\Money::minor((int) $installment->principal_minor, $loan->currency, (int) $loan->scale)->toDecimalString() }}</td>
-                        <td class="px-4 py-2 text-right">{{ \LoanEngine\Money::minor((int) $installment->interest_minor, $loan->currency, (int) $loan->scale)->toDecimalString() }}</td>
+                        <td class="px-4 py-2 text-right">{{ \LoanEngine\Money::minor((int) $installment->principal_minor, $loan->currency, (int) $loan->scale)->formatted() }}</td>
+                        <td class="px-4 py-2 text-right">{{ \LoanEngine\Money::minor((int) $installment->interest_minor, $loan->currency, (int) $loan->scale)->formatted() }}</td>
                         <td class="px-4 py-2 text-right">
-                            {{ \LoanEngine\Money::minor((int) $installment->penalty_minor, $loan->currency, (int) $loan->scale)->toDecimalString() }}
+                            {{ \LoanEngine\Money::minor((int) $installment->penalty_minor, $loan->currency, (int) $loan->scale)->formatted() }}
                             @can('write-off-loans')
                                 @if (! $installment->isSettled() && $installment->penaltyDue()->minor > 0)
                                     <button wire:click="waivePenalty({{ $installment->id }})"
@@ -155,7 +160,7 @@
                                 @endif
                             @endcan
                         </td>
-                        <td class="px-4 py-2 text-right font-medium">{{ $installment->toDue()->totalDue()->toDecimalString() }}</td>
+                        <td class="px-4 py-2 text-right font-medium">{{ $installment->toDue()->totalDue()->formatted() }}</td>
                         <td class="px-4 py-2 text-center">
                             @if ($installment->isSettled())
                                 <span class="inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">{{ __('Paid') }}</span>
@@ -192,12 +197,12 @@
                     @foreach ($loan->payments->sortByDesc('paid_at') as $payment)
                         <tr class="border-t border-gray-100 {{ $payment->reversed_at ? 'text-gray-400' : '' }}">
                             <td class="px-4 py-2">{{ $payment->paid_at->format('Y-m-d') }}</td>
-                            <td class="px-4 py-2 text-right font-medium {{ $payment->reversed_at ? 'line-through' : '' }}">{{ $payment->amount()->toDecimalString() }}</td>
+                            <td class="px-4 py-2 text-right font-medium {{ $payment->reversed_at ? 'line-through' : '' }}">{{ $payment->amount()->formatted() }}</td>
                             <td class="px-4 py-2">{{ $payment->method }}</td>
                             <td class="px-4 py-2">{{ $payment->reference }}</td>
                             <td class="px-4 py-2 text-xs text-gray-500">
                                 @foreach ($payment->allocations as $allocation)
-                                    <span class="mr-2">#{{ $allocation->installment?->number }} {{ $allocation->component->value }}: {{ \LoanEngine\Money::minor((int) $allocation->amount_minor, $loan->currency, (int) $loan->scale)->toDecimalString() }}</span>
+                                    <span class="mr-2">#{{ $allocation->installment?->number }} {{ $allocation->component->value }}: {{ \LoanEngine\Money::minor((int) $allocation->amount_minor, $loan->currency, (int) $loan->scale)->formatted() }}</span>
                                 @endforeach
                             </td>
                             <td class="px-4 py-2 text-right">
@@ -248,10 +253,16 @@
                         @endif
                     </div>
                     <div class="flex items-center gap-3">
-                        <span class="font-medium">{{ \LoanEngine\Money::minor((int) $collateral->estimated_value_minor, $loan->currency, (int) $loan->scale)->toDecimalString() }}</span>
-                        @if ($collateral->status === 'held')
-                            <button wire:click="releaseCollateral({{ $collateral->id }})" wire:confirm="{{ __('Release this collateral?') }}" class="text-xs text-gray-400 hover:text-gray-600">{{ __('Release') }}</button>
-                        @endif
+                        <span class="font-medium">{{ \LoanEngine\Money::minor((int) $collateral->estimated_value_minor, $loan->currency, (int) $loan->scale)->formatted() }}</span>
+                        @can('create-loans')
+                            <button wire:click="editCollateral({{ $collateral->id }})" class="text-xs text-gray-400 hover:text-indigo-600">{{ __('Edit') }}</button>
+                        @endcan
+                        @can('write-off-loans')
+                            @if ($collateral->status === 'held')
+                                <button wire:click="releaseCollateral({{ $collateral->id }})" wire:confirm="{{ __('Release this collateral?') }}" class="text-xs text-gray-400 hover:text-gray-600">{{ __('Release') }}</button>
+                            @endif
+                            <button wire:click="deleteCollateral({{ $collateral->id }})" wire:confirm="{{ __('Delete this collateral record?') }}" class="text-xs text-gray-400 hover:text-red-600">{{ __('Delete') }}</button>
+                        @endcan
                     </div>
                 </div>
             @empty
@@ -272,7 +283,12 @@
                         <p class="font-medium">{{ $guarantor->name }}</p>
                         <p class="text-gray-500">{{ $guarantor->phone }} {{ $guarantor->id_number ? '· '.$guarantor->id_number : '' }}</p>
                     </div>
-                    <button wire:click="removeGuarantor({{ $guarantor->id }})" wire:confirm="{{ __('Remove this guarantor?') }}" class="text-xs text-gray-400 hover:text-red-600">{{ __('Remove') }}</button>
+                    <span class="flex items-center gap-3">
+                        @can('create-loans')
+                            <button wire:click="editGuarantor({{ $guarantor->id }})" class="text-xs text-gray-400 hover:text-indigo-600">{{ __('Edit') }}</button>
+                            <button wire:click="removeGuarantor({{ $guarantor->id }})" wire:confirm="{{ __('Remove this guarantor?') }}" class="text-xs text-gray-400 hover:text-red-600">{{ __('Remove') }}</button>
+                        @endcan
+                    </span>
                 </div>
             @empty
                 <p class="py-4 text-sm text-gray-400">{{ __('No guarantors.') }}</p>
@@ -284,7 +300,7 @@
     @if ($showCollateralModal)
         <div class="fixed inset-0 z-40 flex items-center justify-center bg-gray-900/50 p-4" wire:click.self="$set('showCollateralModal', false)">
             <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-                <h3 class="mb-4 text-lg font-semibold">{{ __('Add collateral') }}</h3>
+                <h3 class="mb-4 text-lg font-semibold">{{ $editingCollateralId ? __('Edit collateral') : __('Add collateral') }}</h3>
                 <div class="space-y-4">
                     <x-tablewire::inputs.text label="{{ __('Type') }}" wire:model="collateralType" required hint="{{ __('e.g. Vehicle, Land title, Equipment') }}" />
                     <x-tablewire::inputs.money label="{{ __('Estimated value') }}" wire:model="collateralValue" required />
@@ -309,7 +325,7 @@
     @if ($showGuarantorModal)
         <div class="fixed inset-0 z-40 flex items-center justify-center bg-gray-900/50 p-4" wire:click.self="$set('showGuarantorModal', false)">
             <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-                <h3 class="mb-4 text-lg font-semibold">{{ __('Add guarantor') }}</h3>
+                <h3 class="mb-4 text-lg font-semibold">{{ $editingGuarantorId ? __('Edit guarantor') : __('Add guarantor') }}</h3>
                 <div class="space-y-4">
                     <x-tablewire::inputs.text label="{{ __('Name') }}" wire:model="guarantorName" required />
                     <x-tablewire::inputs.text label="{{ __('Phone') }}" wire:model="guarantorPhone" />

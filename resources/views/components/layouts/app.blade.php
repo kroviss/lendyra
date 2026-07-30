@@ -33,6 +33,7 @@
                     ['route' => 'borrowers.index', 'label' => __('Borrowers'), 'match' => 'borrowers.*'],
                     ['route' => 'loans.index', 'label' => __('Loans'), 'match' => 'loans.*'],
                     ['route' => 'collaterals.index', 'label' => __('Collateral'), 'match' => 'collaterals.*'],
+                    ['route' => 'guarantors.index', 'label' => __('Guarantors'), 'match' => 'guarantors.*'],
                     ['route' => 'payments.index', 'label' => __('Payments'), 'match' => 'payments.*'],
                     ['route' => 'reports.collections', 'label' => __('Reports'), 'match' => 'reports.*'],
                     in_array(auth()->user()?->role, ['admin', 'manager'], true)

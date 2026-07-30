@@ -62,6 +62,7 @@ class Form extends Component
             $this->borrower->update($data);
         } else {
             $data['created_by'] = auth()->id();
+            $data['branch_id'] = auth()->user()?->branch_id;
             Borrower::create($data);
         }
 

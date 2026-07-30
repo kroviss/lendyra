@@ -79,8 +79,8 @@ class Portfolio extends Component
                 'loan_number' => $loan->loan_number,
                 'borrower' => $loan->borrower?->fullName() ?? '—',
                 'days' => (int) \Illuminate\Support\Carbon::parse($agg->first_overdue)->diffInDays($today),
-                'overdue' => Money::minor((int) $agg->overdue_minor, $loan->currency, (int) $loan->scale)->toDecimalString(),
-                'outstanding' => Money::minor((int) ($outstandingPerLoan[$loanId] ?? 0), $loan->currency, (int) $loan->scale)->toDecimalString(),
+                'overdue' => Money::minor((int) $agg->overdue_minor, $loan->currency, (int) $loan->scale)->formatted(),
+                'outstanding' => Money::minor((int) ($outstandingPerLoan[$loanId] ?? 0), $loan->currency, (int) $loan->scale)->formatted(),
                 'currency' => $loan->currency,
             ];
         }
@@ -107,7 +107,7 @@ class Portfolio extends Component
         $outstandingLabel = $totalOutstanding === []
             ? '0.00'
             : collect($totalOutstanding)
-                ->map(fn (int $minor, string $currency) => Money::minor($minor, $currency)->toDecimalString().' '.$currency)
+                ->map(fn (int $minor, string $currency) => Money::minor($minor, $currency)->formatted().' '.$currency)
                 ->implode(' · ');
 
         return view('livewire.reports.portfolio', [

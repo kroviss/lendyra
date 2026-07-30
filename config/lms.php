@@ -13,6 +13,15 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Branch scoping
+    |--------------------------------------------------------------------------
+    | When true, loan officers and cashiers only see records belonging to
+    | their own branch. Admins and managers always see everything.
+    */
+    'branch_scoping' => (bool) env('LMS_BRANCH_SCOPING', false),
+
+    /*
+    |--------------------------------------------------------------------------
     | Ledger account codes
     |--------------------------------------------------------------------------
     | Default chart-of-accounts codes the ledger posts against. They are

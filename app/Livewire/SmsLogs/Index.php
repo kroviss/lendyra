@@ -42,6 +42,17 @@ class Index extends BaseTable
         return ['installment.loan.loan_number'];
     }
 
+    public function resend(int $logId): void
+    {
+        $log = SmsLog::findOrFail($logId);
+
+        $ok = \App\Services\Sms\SmsFactory::make()->send($log->to, $log->message);
+
+        $log->update(['status' => $ok ? 'sent' : 'failed']);
+
+        $this->dispatch('toast', message: $ok ? __('SMS resent') : __('Resend failed — check the SMS driver settings'));
+    }
+
     protected function columns(): array
     {
         return [
@@ -59,6 +70,12 @@ class Index extends BaseTable
                 'sent' => 'bg-green-100 text-green-700',
                 'failed' => 'bg-red-100 text-red-700',
             ]),
+            Column::make('id', __(''))->center()->format(
+                fn ($value, $row) => $row->status === 'failed'
+                    ? '<button type="button" wire:click.stop="resend('.$value.')" wire:confirm="'.e(__('Resend this SMS?')).'" class="text-xs text-indigo-600 hover:underline">'.e(__('Resend')).'</button>'
+                    : '',
+                html: true
+            ),
         ];
     }
 

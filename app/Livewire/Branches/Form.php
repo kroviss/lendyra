@@ -57,6 +57,26 @@ class Form extends Component
         $this->redirectRoute('branches.index');
     }
 
+    public function delete(): void
+    {
+        \Illuminate\Support\Facades\Gate::authorize('manage-products');
+
+        if (! $this->branch) {
+            return;
+        }
+
+        if ($this->branch->users()->exists() || $this->branch->loans()->withTrashed()->exists()) {
+            $this->addError('name', __('Cannot delete: users or loans are attached to this branch.'));
+
+            return;
+        }
+
+        $this->branch->delete();
+
+        session()->flash('status', __('Branch deleted'));
+        $this->redirectRoute('branches.index');
+    }
+
     public function render(): View
     {
         return view('livewire.branches.form');

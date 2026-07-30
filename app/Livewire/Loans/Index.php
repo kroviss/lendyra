@@ -29,6 +29,7 @@ class Index extends BaseTable
     {
         return Loan::query()
             ->with(['borrower', 'product'])
+            ->when(auth()->user()?->scopedBranchId(), fn (Builder $q, int $branch) => $q->where('branch_id', $branch))
             ->when($this->statusFilter === 'overdue', fn (Builder $q) => $q
                 ->where('status', \App\Enums\LoanStatus::Active)
                 ->whereHas('installments', fn ($i) => $i->whereNull('settled_at')->whereDate('due_date', '<', today())))
@@ -52,7 +53,7 @@ class Index extends BaseTable
             Column::make('principal_minor', __('Principal'))
                 ->right()
                 ->sortable()
-                ->format(fn ($value, $row) => $row->principal()->toDecimalString().' '.$row->currency),
+                ->format(fn ($value, $row) => $row->principal()->formatted().' '.$row->currency),
             Column::make('status', __('Status'))->center()->format(
                 fn ($value) => '<span class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium '
                     .$value->badgeClass().'">'.e($value->label()).'</span>',

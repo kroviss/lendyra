@@ -10,9 +10,25 @@ use TableWire\Table\Column;
 
 class Index extends BaseTable
 {
+    public string $activeFilter = '';
+
+    protected function queryString(): array
+    {
+        return parent::queryString() + [
+            'activeFilter' => ['except' => '', 'as' => 'active'],
+        ];
+    }
+
+    public function updatedActiveFilter(): void
+    {
+        $this->resetPage();
+        $this->clearSelection();
+    }
+
     protected function query(): Builder
     {
-        return Branch::query()->withCount(['users', 'loans']);
+        return Branch::query()
+            ->when($this->activeFilter !== '', fn (Builder $q) => $q->where('is_active', $this->activeFilter === '1'))->withCount(['users', 'loans']);
     }
 
     protected function columns(): array

@@ -19,6 +19,10 @@
             </p>
         @endif
 
+        @if (session('status'))
+            <p class="mb-4 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">{{ session('status') }}</p>
+        @endif
+
         <form method="POST" action="{{ route('login.attempt') }}" class="space-y-4">
             @csrf
 
@@ -41,6 +45,10 @@
             <button type="submit" class="w-full rounded-lg bg-indigo-600 py-2 text-sm font-medium text-white hover:bg-indigo-500">
                 {{ __('Log in') }}
             </button>
+
+            <p class="text-center">
+                <a href="{{ route('password.request') }}" class="text-sm text-gray-500 hover:text-indigo-600">{{ __('Forgot your password?') }}</a>
+            </p>
         </form>
     </div>
 </body>
