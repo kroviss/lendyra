@@ -1,8 +1,8 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
-    "name": "loanpilot/loanpilot",
+    "name": "lendyra/lendyra",
     "type": "project",
-    "description": "LoanPilot — loan management system for microfinance and lending businesses.",
+    "description": "Lendyra — loan management system for microfinance and lending businesses.",
     "keywords": [
         "laravel",
         "framework"

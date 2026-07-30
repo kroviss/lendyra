@@ -1,6 +1,6 @@
-# LoanPilot Commercial License (Draft — finalize before launch)
+# Lendyra Commercial License (Draft — finalize before launch)
 
-Copyright (c) 2026 LoanPilot. All rights reserved.
+Copyright (c) 2026 Lendyra. All rights reserved.
 
 ## Regular License (single installation)
 

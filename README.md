@@ -1,4 +1,4 @@
-# LoanPilot
+# Lendyra
 
 
 Self-hosted loan management for micro-lenders, MFIs, pawnshops and
