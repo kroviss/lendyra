@@ -42,7 +42,7 @@
                 <p>{{ __('Rate') }}: {{ $loan->annual_rate }}% / {{ __('yr') }} ({{ str_replace('_', ' ', $loan->method->value) }})</p>
                 <p>{{ __('Term') }}: {{ $loan->term_count }} × {{ $loan->frequency->value }}</p>
                 <p>{{ __('Disbursed') }}: {{ $loan->disbursed_at?->format('Y-m-d') }}</p>
-                <p>{{ __('Status') }}: {{ str_replace('_', ' ', $loan->status->value) }}</p>
+                <p>{{ __('Status') }}: {{ $loan->status->label() }}</p>
             </div>
         </div>
 

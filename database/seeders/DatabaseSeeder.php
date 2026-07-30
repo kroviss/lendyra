@@ -15,6 +15,14 @@ class DatabaseSeeder extends Seeder
     {
         $branch = Branch::firstOrCreate(['code' => 'HQ'], ['name' => 'Head Office']);
 
+        // Never plant the well-known default credential next to real
+        // accounts — only on a completely empty install (demo/dev).
+        if (User::query()->count() > 0) {
+            $this->seedReferenceData($branch);
+
+            return;
+        }
+
         User::firstOrCreate(
             ['email' => 'admin@example.com'],
             [
@@ -25,6 +33,11 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
+        $this->seedReferenceData($branch);
+    }
+
+    private function seedReferenceData(Branch $branch): void
+    {
         LoanProduct::firstOrCreate(
             ['code' => 'BIZ-12'],
             [

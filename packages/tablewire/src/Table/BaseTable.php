@@ -84,7 +84,7 @@ abstract class BaseTable extends Component
         $this->applySearch($query);
         $this->applySort($query);
 
-        return $query->paginate($this->perPage);
+        return $query->paginate(max(1, min((int) $this->perPage, 200)));
     }
 
     public function sortBy(string $field): void
@@ -114,6 +114,7 @@ abstract class BaseTable extends Component
 
     public function updatedPerPage(): void
     {
+        $this->perPage = max(1, min((int) $this->perPage, 200));
         $this->resetPage();
         $this->clearSelection();
     }

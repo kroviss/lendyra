@@ -15,6 +15,21 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // Role middleware must re-run on Livewire update requests, not just
+        // the initial page load — otherwise a demoted user's open page
+        // keeps executing privileged actions.
+        \Livewire\Livewire::addPersistentMiddleware([
+            \App\Http\Middleware\EnsureRole::class,
+        ]);
+
+        // Throttle login per IP AND per email+IP.
+        \Illuminate\Support\Facades\RateLimiter::for('login', function (\Illuminate\Http\Request $request) {
+            return [
+                \Illuminate\Cache\RateLimiting\Limit::perMinute(5)->by('ip:'.$request->ip()),
+                \Illuminate\Cache\RateLimiting\Limit::perMinute(5)->by('email:'.strtolower((string) $request->input('email')).'|'.$request->ip()),
+            ];
+        });
+
         // Role → ability map. admin/manager run the business; loan
         // officers originate; cashiers take money; accountants read.
         $abilities = [

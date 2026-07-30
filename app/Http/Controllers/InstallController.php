@@ -95,11 +95,34 @@ class InstallController extends Controller
 
     public function admin()
     {
+        try {
+            if (User::query()->exists()) {
+                file_put_contents(storage_path('app/installed.lock'), now()->toIso8601String());
+
+                return redirect('/login');
+            }
+        } catch (Throwable) {
+            return redirect()->route('install.database');
+        }
+
         return view('install.admin');
     }
 
     public function saveAdmin(Request $request)
     {
+        // The admin step must be a one-shot: once ANY user exists, an
+        // anonymous visitor must never be able to mint another admin
+        // (e.g. when installed.lock was lost during an upgrade).
+        try {
+            if (User::query()->exists()) {
+                file_put_contents(storage_path('app/installed.lock'), now()->toIso8601String());
+
+                return redirect('/login');
+            }
+        } catch (Throwable) {
+            return redirect()->route('install.database');
+        }
+
         $data = $request->validate([
             'name' => 'required|min:2|max:255',
             'email' => 'required|email|max:255',
@@ -154,8 +177,12 @@ class InstallController extends Controller
             $escaped = '"'.addcslashes($value, '"\\').'"';
             $line = "{$key}={$escaped}";
 
+            // Escape backslashes and $ so a password like "pa$1ss" can't
+            // act as a backreference in the replacement string.
+            $replacement = str_replace(['\\', '$'], ['\\\\', '\\$'], $line);
+
             $content = preg_match("/^{$key}=.*$/m", $content)
-                ? preg_replace("/^{$key}=.*$/m", $line, $content)
+                ? preg_replace("/^{$key}=.*$/m", $replacement, $content)
                 : rtrim($content)."\n{$line}\n";
         }
 

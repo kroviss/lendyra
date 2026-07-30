@@ -56,9 +56,14 @@ class Index extends BaseTable
             Column::make('amount_minor', __('Amount'))
                 ->right()
                 ->sortable()
-                ->format(fn ($value, $row) => ($row->reversed_at ? '⊘ ' : '')
-                    .Money::minor((int) $value, $row->loan?->currency ?? 'USD', (int) ($row->loan?->scale ?? 2))->toDecimalString()
+                ->format(fn ($value, $row) => Money::minor((int) $value, $row->loan?->currency ?? 'USD', (int) ($row->loan?->scale ?? 2))->toDecimalString()
                     .' '.($row->loan?->currency ?? '')),
+            Column::make('reversed_at', __('Status'))->center()->format(
+                fn ($value) => $value
+                    ? '<span class="inline-flex rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">'.__('Reversed').'</span>'
+                    : '<span class="inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">'.__('Posted').'</span>',
+                html: true
+            ),
             Column::make('method', __('Method'))->center()->badge([
                 'cash' => 'bg-green-100 text-green-700',
                 'bank' => 'bg-blue-100 text-blue-700',
@@ -74,21 +79,32 @@ class Index extends BaseTable
         return $row->loan ? route('loans.show', $row->loan) : null;
     }
 
+    public function setToday(): void
+    {
+        $this->from = today()->format('Y-m-d');
+        $this->to = today()->format('Y-m-d');
+        $this->resetPage();
+    }
+
     public function render(): View
     {
-        // Totals for the CURRENT filter+search window (excludes reversed).
+        // Totals for the CURRENT filter+search window (excludes reversed),
+        // aggregated in SQL — never hydrate the whole payments table.
         $query = $this->query()->whereNull('reversed_at');
         $this->applySearch($query);
 
+        $rows = $query
+            ->join('loans', 'loans.id', '=', 'loan_payments.loan_id')
+            ->groupBy('loans.currency', 'loan_payments.method')
+            ->select('loans.currency', 'loan_payments.method', \Illuminate\Support\Facades\DB::raw('SUM(amount_minor) as total'))
+            ->get();
+
         $totals = [];
         $byMethod = [];
-        $query->chunkById(300, function ($payments) use (&$totals, &$byMethod) {
-            foreach ($payments as $payment) {
-                $currency = $payment->loan?->currency ?? 'USD';
-                $totals[$currency] = ($totals[$currency] ?? 0) + (int) $payment->amount_minor;
-                $byMethod[$payment->method][$currency] = ($byMethod[$payment->method][$currency] ?? 0) + (int) $payment->amount_minor;
-            }
-        });
+        foreach ($rows as $row) {
+            $totals[$row->currency] = ($totals[$row->currency] ?? 0) + (int) $row->total;
+            $byMethod[$row->method][$row->currency] = ($byMethod[$row->method][$row->currency] ?? 0) + (int) $row->total;
+        }
 
         $format = fn (array $sums) => collect($sums)
             ->map(fn (int $minor, string $currency) => Money::minor($minor, $currency)->toDecimalString().' '.$currency)

@@ -68,6 +68,21 @@ class Loan extends Model
         return $this->hasMany(Guarantor::class);
     }
 
+    public function createdBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function approvedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    public function disbursedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'disbursed_by');
+    }
+
     public function collaterals(): HasMany
     {
         return $this->hasMany(Collateral::class);

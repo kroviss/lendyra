@@ -37,6 +37,8 @@ class Profile extends Component
 
         if ($this->password !== '') {
             $user->password = Hash::make($this->password);
+            // Invalidate stolen remember-me cookies on password change.
+            $user->setRememberToken(\Illuminate\Support\Str::random(60));
         }
 
         $user->save();

@@ -49,6 +49,8 @@ class Form extends Component
 
     public function save(): void
     {
+        \Illuminate\Support\Facades\Gate::authorize('manage-users');
+
         if (config('lms.demo')) {
             $this->addError('name', __('Account changes are disabled in demo mode.'));
 

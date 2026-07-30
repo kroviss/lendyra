@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Reports;
 
+use App\Models\JournalLine;
 use App\Models\LedgerAccount;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\DB;
@@ -12,37 +13,58 @@ class TrialBalance extends Component
 {
     public function render(): View
     {
-        // Unqualified columns keep this table-prefix safe.
-        $sums = \App\Models\JournalLine::query()
-            ->select('ledger_account_id', DB::raw('SUM(debit_minor) as debits'), DB::raw('SUM(credit_minor) as credits'))
-            ->groupBy('ledger_account_id')
+        // Grouped by account AND currency — cents of different currencies
+        // must never be added together.
+        $sums = JournalLine::query()
+            ->select(
+                'ledger_account_id',
+                'currency',
+                DB::raw('SUM(debit_minor) as debits'),
+                DB::raw('SUM(credit_minor) as credits')
+            )
+            ->groupBy('ledger_account_id', 'currency')
             ->get()
-            ->keyBy('ledger_account_id');
+            ->groupBy('ledger_account_id');
 
-        $rows = LedgerAccount::orderBy('code')->get()
-            ->map(function (LedgerAccount $account) use ($sums) {
-                $debits = (int) ($sums[$account->id]->debits ?? 0);
-                $credits = (int) ($sums[$account->id]->credits ?? 0);
+        $accounts = LedgerAccount::orderBy('code')->get();
+        $rows = [];
+
+        foreach ($accounts as $account) {
+            $lines = $sums->get($account->id, collect());
+
+            foreach ($lines as $line) {
+                $debits = (int) $line->debits;
+                $credits = (int) $line->credits;
                 $net = $debits - $credits;
 
-                return [
+                $rows[] = [
                     'code' => $account->code,
-                    'name' => $account->name,
+                    'name' => $account->name.($lines->count() > 1 ? ' ('.$line->currency.')' : ''),
                     'type' => $account->type,
-                    'debits' => Money::minor($debits)->toDecimalString(),
-                    'credits' => Money::minor($credits)->toDecimalString(),
-                    'balance' => Money::minor(abs($net))->toDecimalString().($net < 0 ? ' Cr' : ($net > 0 ? ' Dr' : '')),
+                    'debits' => Money::minor($debits, $line->currency)->toDecimalString(),
+                    'credits' => Money::minor($credits, $line->currency)->toDecimalString(),
+                    'balance' => Money::minor(abs($net), $line->currency)->toDecimalString().($net < 0 ? ' Cr' : ($net > 0 ? ' Dr' : '')),
                 ];
-            });
+            }
+        }
 
-        $totalDebits = (int) DB::table('journal_lines')->sum('debit_minor');
-        $totalCredits = (int) DB::table('journal_lines')->sum('credit_minor');
+        // Per-currency grand totals; books balance iff every currency does.
+        $currencyTotals = JournalLine::query()
+            ->select('currency', DB::raw('SUM(debit_minor) as debits'), DB::raw('SUM(credit_minor) as credits'))
+            ->groupBy('currency')
+            ->get();
+
+        $balanced = $currencyTotals->every(fn ($t) => (int) $t->debits === (int) $t->credits);
+
+        $format = fn (string $column) => $currencyTotals
+            ->map(fn ($t) => Money::minor((int) $t->{$column}, $t->currency)->toDecimalString().' '.$t->currency)
+            ->implode(' · ');
 
         return view('livewire.reports.trial-balance', [
-            'rows' => $rows,
-            'totalDebits' => Money::minor($totalDebits)->toDecimalString(),
-            'totalCredits' => Money::minor($totalCredits)->toDecimalString(),
-            'balanced' => $totalDebits === $totalCredits,
+            'rows' => collect($rows),
+            'totalDebits' => $currencyTotals->isEmpty() ? '0.00' : $format('debits'),
+            'totalCredits' => $currencyTotals->isEmpty() ? '0.00' : $format('credits'),
+            'balanced' => $balanced,
         ]);
     }
 }

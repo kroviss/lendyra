@@ -19,12 +19,19 @@ class Collections extends Component
     use WithPagination;
 
     public string $window = 'today';
+    public string $search = '';
 
     protected $queryString = [
         'window' => ['except' => 'today'],
+        'search' => ['except' => '', 'as' => 'q'],
     ];
 
     public function updatedWindow(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatedSearch(): void
     {
         $this->resetPage();
     }
@@ -44,16 +51,34 @@ class Collections extends Component
             ->with(['loan.borrower'])
             ->when($from, fn ($q) => $q->whereDate('due_date', '>=', $from))
             ->whereDate('due_date', '<=', $to)
+            ->when(trim($this->search) !== '', function ($q) {
+                $like = '%'.str_replace(['%', '_'], ['\%', '\_'], trim($this->search)).'%';
+                $q->whereHas('loan', fn ($l) => $l
+                    ->where('loan_number', 'like', $like)
+                    ->orWhereHas('borrower', fn ($b) => $b
+                        ->where('first_name', 'like', $like)
+                        ->orWhere('last_name', 'like', $like)
+                        ->orWhere('phone', 'like', $like)));
+            })
             ->orderBy('due_date');
 
-        // Expected totals per currency for the whole window (not just this page).
+        // Expected totals per currency for the whole window (not just this
+        // page) — SQL aggregate, grouped per loan then mapped to currency.
+        $sums = (clone $query)
+            ->reorder()
+            ->groupBy('loan_id')
+            ->select('loan_id', \Illuminate\Support\Facades\DB::raw(
+                'SUM(principal_minor - principal_paid_minor + interest_minor - interest_paid_minor + penalty_minor - penalty_paid_minor) as due'
+            ))
+            ->pluck('due', 'loan_id');
+
+        $loanCurrencies = \App\Models\Loan::whereIn('id', $sums->keys())->pluck('currency', 'id');
+
         $totals = [];
-        (clone $query)->chunkById(300, function ($installments) use (&$totals) {
-            foreach ($installments as $installment) {
-                $due = $installment->toDue()->totalDue();
-                $totals[$due->currency] = ($totals[$due->currency] ?? 0) + $due->minor;
-            }
-        });
+        foreach ($sums as $loanId => $due) {
+            $currency = $loanCurrencies[$loanId] ?? 'USD';
+            $totals[$currency] = ($totals[$currency] ?? 0) + (int) $due;
+        }
 
         $totalLabel = $totals === []
             ? '0.00'

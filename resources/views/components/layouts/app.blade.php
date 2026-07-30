@@ -6,21 +6,34 @@
     <title>{{ $title ?? config('app.name') }}</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
-<body class="min-h-screen bg-gray-100 font-sans text-gray-900 antialiased">
+<body class="min-h-screen bg-gray-100 font-sans text-gray-900 antialiased" x-data="{ sidebarOpen: false }">
     <div class="flex min-h-screen">
+        {{-- Mobile top bar --}}
+        <div class="fixed inset-x-0 top-0 z-30 flex h-14 items-center gap-3 border-b border-gray-200 bg-white px-4 lg:hidden">
+            <button x-on:click="sidebarOpen = true" class="rounded-md p-2 text-gray-500 hover:bg-gray-50" aria-label="{{ __('Menu') }}">
+                <svg class="size-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg>
+            </button>
+            <span class="font-semibold">{{ config('app.name') }}</span>
+        </div>
+
+        {{-- Mobile overlay --}}
+        <div x-show="sidebarOpen" x-cloak x-on:click="sidebarOpen = false" class="fixed inset-0 z-30 bg-gray-900/40 lg:hidden"></div>
+
         {{-- Sidebar --}}
-        <aside class="fixed inset-y-0 left-0 z-20 flex w-60 flex-col border-r border-gray-200 bg-white">
+        <aside
+            :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'"
+            class="fixed inset-y-0 left-0 z-40 flex w-60 -translate-x-full flex-col border-r border-gray-200 bg-white transition-transform lg:z-20 lg:translate-x-0">
             <div class="flex h-16 items-center gap-2 border-b border-gray-100 px-5">
                 <div class="flex size-8 items-center justify-center rounded-lg bg-indigo-600 text-sm font-bold text-white">L</div>
                 <span class="text-lg font-semibold">{{ config('app.name') }}</span>
             </div>
             <nav class="flex-1 space-y-1 p-3">
                 @foreach (array_filter([
-                    ['route' => 'dashboard', 'label' => __('Dashboard')],
-                    ['route' => 'borrowers.index', 'label' => __('Borrowers')],
-                    ['route' => 'loans.index', 'label' => __('Loans')],
-                    ['route' => 'collaterals.index', 'label' => __('Collateral')],
-                    ['route' => 'payments.index', 'label' => __('Payments')],
+                    ['route' => 'dashboard', 'label' => __('Dashboard'), 'match' => 'dashboard'],
+                    ['route' => 'borrowers.index', 'label' => __('Borrowers'), 'match' => 'borrowers.*'],
+                    ['route' => 'loans.index', 'label' => __('Loans'), 'match' => 'loans.*'],
+                    ['route' => 'collaterals.index', 'label' => __('Collateral'), 'match' => 'collaterals.*'],
+                    ['route' => 'payments.index', 'label' => __('Payments'), 'match' => 'payments.*'],
                     ['route' => 'reports.collections', 'label' => __('Reports'), 'match' => 'reports.*'],
                     in_array(auth()->user()?->role, ['admin', 'manager'], true)
                         ? ['route' => 'products.index', 'label' => __('Loan Products')]
@@ -60,7 +73,7 @@
         </aside>
 
         {{-- Main --}}
-        <main class="ml-60 flex-1 p-8">
+        <main class="flex-1 p-4 pt-20 lg:ml-60 lg:p-8 lg:pt-8">
             @if (config('lms.demo'))
                 <div class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
                     {{ __('Demo mode — data resets nightly; account changes are disabled.') }}

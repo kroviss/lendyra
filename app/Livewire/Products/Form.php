@@ -74,6 +74,8 @@ class Form extends Component
 
     public function save(): void
     {
+        \Illuminate\Support\Facades\Gate::authorize('manage-products');
+
         $data = $this->validate();
         $data['currency'] = strtoupper($data['currency']);
         $data['penalty_cap_percent'] = $data['penalty_cap_percent'] === '' ? null : $data['penalty_cap_percent'];

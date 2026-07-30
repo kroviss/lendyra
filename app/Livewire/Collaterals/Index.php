@@ -29,6 +29,7 @@ class Index extends BaseTable
     protected function query(): Builder
     {
         return Collateral::query()
+            ->whereHas('loan')
             ->with(['loan.borrower'])
             ->when($this->statusFilter !== '', fn (Builder $q) => $q->where('status', $this->statusFilter));
     }

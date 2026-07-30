@@ -32,6 +32,10 @@ class Form extends Component
     {
         $this->disbursed_at = today()->format('Y-m-d');
 
+        if ($loan === null && request()->filled('borrower')) {
+            $this->borrower_id = (int) request()->query('borrower');
+        }
+
         if ($loan !== null && $loan->exists) {
             \Illuminate\Support\Facades\Gate::authorize('create-loans');
 
@@ -127,6 +131,8 @@ class Form extends Component
 
     public function save(): void
     {
+        \Illuminate\Support\Facades\Gate::authorize('create-loans');
+
         $this->validate();
 
         $product = LoanProduct::findOrFail($this->loan_product_id);
@@ -137,7 +143,16 @@ class Form extends Component
                 abort(403);
             }
 
+            // Editing invalidates any prior approval: either the editor can
+            // approve (re-stamp them as approver) or the loan goes back to
+            // the pending queue. Terms must never change under a checker's
+            // signature.
+            $canApprove = \Illuminate\Support\Facades\Gate::allows('activate-loans');
+
             $this->loan->update([
+                'status' => $canApprove ? LoanStatus::Approved : LoanStatus::PendingApproval,
+                'approved_by' => $canApprove ? auth()->id() : null,
+                'approved_at' => $canApprove ? now() : null,
                 'borrower_id' => $this->borrower_id,
                 'loan_product_id' => $product->id,
                 'currency' => $product->currency,
@@ -161,7 +176,7 @@ class Form extends Component
         }
 
         $loan = Loan::create([
-            'loan_number' => 'LN-'.now()->format('y').'-'.str_pad((string) (Loan::withTrashed()->count() + 1), 5, '0', STR_PAD_LEFT),
+            'loan_number' => $this->nextLoanNumber(),
             'borrower_id' => $this->borrower_id,
             'loan_product_id' => $product->id,
             'branch_id' => auth()->user()?->branch_id,
@@ -180,6 +195,8 @@ class Form extends Component
             'status' => \Illuminate\Support\Facades\Gate::allows('activate-loans')
                 ? LoanStatus::Approved
                 : LoanStatus::PendingApproval,
+            'approved_by' => \Illuminate\Support\Facades\Gate::allows('activate-loans') ? auth()->id() : null,
+            'approved_at' => \Illuminate\Support\Facades\Gate::allows('activate-loans') ? now() : null,
             'purpose' => $this->purpose ?: null,
             'created_by' => auth()->id(),
         ]);
@@ -188,10 +205,23 @@ class Form extends Component
         $this->redirectRoute('loans.show', $loan);
     }
 
+    /** Sequential number with a collision-proof suffix fallback. */
+    private function nextLoanNumber(): string
+    {
+        $base = 'LN-'.now()->format('y').'-'.str_pad((string) (Loan::withTrashed()->count() + 1), 5, '0', STR_PAD_LEFT);
+
+        return Loan::withTrashed()->where('loan_number', $base)->exists()
+            ? $base.'-'.strtoupper(substr(uniqid(), -4))
+            : $base;
+    }
+
     public function render(): View
     {
         return view('livewire.loans.form', [
-            'borrowerOptions' => Borrower::orderBy('first_name')
+            // Cap the embedded option list; very large books need the
+            // async select on the roadmap, but 500 covers the target scale.
+            'borrowerOptions' => Borrower::orderByDesc('id')
+                ->limit(500)
                 ->get()
                 ->map(fn ($b) => ['value' => $b->id, 'label' => $b->fullName().($b->phone ? " ({$b->phone})" : '')]),
             'productOptions' => LoanProduct::where('is_active', true)

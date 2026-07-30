@@ -3,13 +3,7 @@
         <div>
             <div class="flex items-center gap-3">
                 <h1 class="text-2xl font-semibold">{{ $loan->loan_number }}</h1>
-                <span class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium {{ match ($loan->status->value) {
-                    'active' => 'bg-green-100 text-green-700',
-                    'approved' => 'bg-blue-100 text-blue-700',
-                    'closed' => 'bg-gray-100 text-gray-600',
-                    'written_off' => 'bg-red-100 text-red-700',
-                    default => 'bg-yellow-100 text-yellow-700',
-                } }}">{{ str_replace('_', ' ', $loan->status->value) }}</span>
+                <span class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium {{ $loan->status->badgeClass() }}">{{ $loan->status->label() }}</span>
             </div>
             <p class="mt-1 text-sm text-gray-500">
                 {{ $loan->borrower->fullName() }} · {{ $loan->product->name }} ·
@@ -23,7 +17,9 @@
 
         <div class="flex gap-2">
             <a href="{{ route('loans.index') }}" class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">← {{ __('Back') }}</a>
-            <a href="{{ route('loans.statement', $loan) }}" target="_blank" class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">{{ __('Statement') }}</a>
+            @if ($loan->installments->isNotEmpty())
+                <a href="{{ route('loans.statement', $loan) }}" target="_blank" class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">{{ __('Statement') }}</a>
+            @endif
 
             @if ($loan->status->scheduleIsMutable())
                 @can('create-loans')
@@ -37,7 +33,7 @@
                         class="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-50">
                         {{ __('Reject') }}
                     </button>
-                    <button wire:click="approve" wire:loading.attr="disabled"
+                    <button wire:click="approve" wire:confirm="{{ __('Approve this loan application?') }}" wire:loading.attr="disabled"
                         class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50">
                         {{ __('Approve') }}
                     </button>
@@ -100,6 +96,12 @@
             {{ $actionError }}
         </div>
     @endif
+
+    <p class="mb-4 text-xs text-gray-400">
+        {{ __('Created by') }}: {{ $loan->createdBy?->name ?? '—' }} {{ $loan->created_at?->format('Y-m-d H:i') }}
+        @if ($loan->approved_by) · {{ __('Approved by') }}: {{ $loan->approvedBy?->name }} {{ $loan->approved_at?->format('Y-m-d H:i') }} @endif
+        @if ($loan->disbursed_by) · {{ __('Disbursed by') }}: {{ $loan->disbursedBy?->name }} @endif
+    </p>
 
     @if ($loan->status === \App\Enums\LoanStatus::Active || $loan->status === \App\Enums\LoanStatus::Closed)
         <div class="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -326,6 +328,9 @@
         <div class="fixed inset-0 z-40 flex items-center justify-center bg-gray-900/50 p-4" wire:click.self="$set('showPaymentModal', false)">
             <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
                 <h3 class="mb-4 text-lg font-semibold">{{ __('Record payment') }}</h3>
+                @if ($actionError)
+                    <p class="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{{ $actionError }}</p>
+                @endif
                 <div class="space-y-4">
                     <x-tablewire::inputs.money label="{{ __('Amount') }}" wire:model="paymentAmount" required />
                     <x-tablewire::inputs.text label="{{ __('Date') }}" type="date" wire:model="paymentDate" required />
@@ -349,8 +354,15 @@
         <div class="fixed inset-0 z-40 flex items-center justify-center bg-gray-900/50 p-4" wire:click.self="$set('showPayoffModal', false)">
             <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
                 <h3 class="mb-4 text-lg font-semibold">{{ __('Early payoff') }}</h3>
+                @if ($actionError)
+                    <p class="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{{ $actionError }}</p>
+                @endif
 
                 <x-tablewire::inputs.text label="{{ __('Payoff date') }}" type="date" wire:model.live="payoffDate" required />
+                <div class="mt-3">
+                    <x-tablewire::inputs.select label="{{ __('Method') }}" wire:model="payoffMethod"
+                        :options="['cash' => __('Cash'), 'bank' => __('Bank transfer'), 'mobile' => __('Mobile money')]" />
+                </div>
 
                 @if ($quote = $this->payoffQuote)
                     <dl class="mt-4 space-y-2 rounded-lg bg-gray-50 p-4 text-sm">

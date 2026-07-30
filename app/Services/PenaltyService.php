@@ -33,9 +33,14 @@ class PenaltyService
             ->each(function (LoanInstallment $installment) use ($config, $asOf) {
                 $accrued = PenaltyCalculator::forInstallment($installment->toDue(), $config, $asOf);
 
+                // $accrued is the from-scratch total for ALL overdue days —
+                // never ADD what was already paid, or every payment gets
+                // re-billed on the next accrual. Total accrued can only
+                // grow and never drops below what was collected.
                 $installment->update([
                     'penalty_minor' => max(
-                        $accrued->minor + (int) $installment->penalty_paid_minor,
+                        $accrued->minor,
+                        (int) $installment->penalty_minor,
                         (int) $installment->penalty_paid_minor
                     ),
                 ]);

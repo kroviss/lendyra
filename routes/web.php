@@ -8,7 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
-Route::prefix('install')->controller(\App\Http\Controllers\InstallController::class)->group(function () {
+Route::prefix('install')->middleware('throttle:20,1')->controller(\App\Http\Controllers\InstallController::class)->group(function () {
     Route::get('/', 'requirements')->name('install.requirements');
     Route::get('/database', 'database')->name('install.database');
     Route::post('/database', 'saveDatabase')->name('install.database.save');
@@ -29,10 +29,16 @@ Route::middleware('guest')->group(function () {
             return back()->withErrors(['email' => __('Invalid credentials.')])->onlyInput('email');
         }
 
+        if (! Auth::user()->is_active) {
+            Auth::logout();
+
+            return back()->withErrors(['email' => __('This account has been disabled.')])->onlyInput('email');
+        }
+
         $request->session()->regenerate();
 
         return redirect()->intended('/');
-    })->middleware('throttle:5,1')->name('login.attempt');
+    })->middleware('throttle:login')->name('login.attempt');
 });
 
 Route::middleware('auth')->group(function () {

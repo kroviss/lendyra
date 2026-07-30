@@ -17,18 +17,21 @@ class Dashboard extends Component
         $activeLoans = Loan::where('status', LoanStatus::Active)->count();
 
         // Sums are kept per currency — minor units of different
-        // currencies must never be added together.
-        $outstandingByCurrency = [];
+        // currencies must never be added together. Aggregated in SQL:
+        // hydrating every active loan+installments melts at scale.
+        $currencies = Loan::where('status', LoanStatus::Active)->pluck('currency', 'id');
 
-        Loan::query()
-            ->where('status', LoanStatus::Active)
-            ->with('installments')
-            ->chunkById(200, function ($loans) use (&$outstandingByCurrency) {
-                foreach ($loans as $loan) {
-                    $outstandingByCurrency[$loan->currency] =
-                        ($outstandingByCurrency[$loan->currency] ?? 0) + $loan->principalOutstanding()->minor;
-                }
-            });
+        $sums = \App\Models\LoanInstallment::query()
+            ->whereIn('loan_id', $currencies->keys())
+            ->groupBy('loan_id')
+            ->select('loan_id', \Illuminate\Support\Facades\DB::raw('SUM(principal_minor - principal_paid_minor) as outstanding'))
+            ->pluck('outstanding', 'loan_id');
+
+        $outstandingByCurrency = [];
+        foreach ($sums as $loanId => $outstanding) {
+            $currency = $currencies[$loanId];
+            $outstandingByCurrency[$currency] = ($outstandingByCurrency[$currency] ?? 0) + (int) $outstanding;
+        }
 
         $overdueCount = LoanInstallment::query()
             ->whereHas('loan', fn ($q) => $q->where('status', LoanStatus::Active))
@@ -36,18 +39,15 @@ class Dashboard extends Component
             ->whereDate('due_date', '<', today())
             ->count();
 
-        $collectedByCurrency = [];
-
-        LoanPayment::query()
+        $collectedByCurrency = LoanPayment::query()
             ->whereNull('reversed_at')
             ->whereBetween('paid_at', [now()->startOfMonth(), now()->endOfMonth()])
-            ->with('loan:id,currency')
-            ->chunkById(200, function ($payments) use (&$collectedByCurrency) {
-                foreach ($payments as $payment) {
-                    $currency = $payment->loan->currency;
-                    $collectedByCurrency[$currency] = ($collectedByCurrency[$currency] ?? 0) + (int) $payment->amount_minor;
-                }
-            });
+            ->join('loans', 'loans.id', '=', 'loan_payments.loan_id')
+            ->groupBy('loans.currency')
+            ->select('loans.currency', \Illuminate\Support\Facades\DB::raw('SUM(amount_minor) as total'))
+            ->pluck('total', 'currency')
+            ->map(fn ($v) => (int) $v)
+            ->all();
 
         // Collections trend, last 6 months, in the portfolio's primary
         // (most common) currency only — a chart must not mix currencies.
@@ -65,18 +65,21 @@ class Dashboard extends Component
             $chart[$month->format('M')] = 0;
         }
 
-        LoanPayment::query()
+        $monthly = LoanPayment::query()
             ->whereNull('reversed_at')
             ->whereDate('paid_at', '>=', now()->startOfMonth()->subMonths(5))
             ->whereHas('loan', fn ($q) => $q->where('currency', $primaryCurrency))
-            ->chunkById(200, function ($payments) use (&$chart) {
-                foreach ($payments as $payment) {
-                    $key = $payment->paid_at->format('M');
-                    if (array_key_exists($key, $chart)) {
-                        $chart[$key] += (int) $payment->amount_minor;
-                    }
-                }
-            });
+            ->groupBy('ym')
+            ->select(
+                \Illuminate\Support\Facades\DB::raw("DATE_FORMAT(paid_at, '%Y-%m') as ym"),
+                \Illuminate\Support\Facades\DB::raw('SUM(amount_minor) as total')
+            )
+            ->pluck('total', 'ym');
+
+        for ($i = 5; $i >= 0; $i--) {
+            $month = now()->startOfMonth()->subMonths($i);
+            $chart[$month->format('M')] = (int) ($monthly[$month->format('Y-m')] ?? 0);
+        }
 
         $chartMax = max(1, max($chart));
         $chartBars = collect($chart)->map(fn (int $minor, string $label) => [
@@ -85,7 +88,10 @@ class Dashboard extends Component
             'height' => (int) round($minor / $chartMax * 100),
         ])->values()->all();
 
+        $pendingCount = Loan::where('status', LoanStatus::PendingApproval)->count();
+
         return view('livewire.dashboard', [
+            'pendingCount' => $pendingCount,
             'chartBars' => $chartBars,
             'chartCurrency' => $primaryCurrency,
             'activeLoans' => $activeLoans,

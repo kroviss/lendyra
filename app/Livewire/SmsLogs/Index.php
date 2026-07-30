@@ -10,9 +10,36 @@ use TableWire\Table\Column;
 
 class Index extends BaseTable
 {
+    public string $kindFilter = '';
+    public string $statusFilter = '';
+
+    protected function queryString(): array
+    {
+        return parent::queryString() + [
+            'kindFilter' => ['except' => '', 'as' => 'kind'],
+            'statusFilter' => ['except' => '', 'as' => 'status'],
+        ];
+    }
+
+    public function updated($property): void
+    {
+        if (in_array($property, ['kindFilter', 'statusFilter'], true)) {
+            $this->resetPage();
+            $this->clearSelection();
+        }
+    }
+
     protected function query(): Builder
     {
-        return SmsLog::query()->with('installment.loan');
+        return SmsLog::query()
+            ->with('installment.loan')
+            ->when($this->kindFilter !== '', fn (Builder $q) => $q->where('kind', $this->kindFilter))
+            ->when($this->statusFilter !== '', fn (Builder $q) => $q->where('status', $this->statusFilter));
+    }
+
+    protected function searchAlso(): array
+    {
+        return ['installment.loan.loan_number'];
     }
 
     protected function columns(): array

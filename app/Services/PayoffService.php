@@ -39,6 +39,22 @@ class PayoffService
     public function settle(Loan $loan, DateTimeImmutable $asOf, string $method = 'cash', ?int $receivedBy = null): LoanPayment
     {
         return DB::transaction(function () use ($loan, $asOf, $method, $receivedBy) {
+            // Lock + re-check: a concurrent settle/payment must not produce
+            // a second full payoff booked as overpayment.
+            $loan = \App\Models\Loan::lockForUpdate()->findOrFail($loan->id);
+
+            if (! $loan->status->acceptsPayments()) {
+                throw new \LogicException("Loan {$loan->loan_number} is {$loan->status->value} and cannot be settled.");
+            }
+
+            $loan->installments()->lockForUpdate()->get();
+            $loan->unsetRelation('installments');
+
+            // Penalties must be current as of the settlement date, not as
+            // of last night's cron.
+            app(PenaltyService::class)->accrue($loan, $asOf);
+            $loan->unsetRelation('installments');
+
             $quote = $this->quote($loan, $asOf);
 
             $cutoff = $asOf->format('Y-m-d');

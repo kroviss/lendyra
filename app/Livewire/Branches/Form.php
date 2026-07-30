@@ -43,6 +43,8 @@ class Form extends Component
 
     public function save(): void
     {
+        \Illuminate\Support\Facades\Gate::authorize('manage-products');
+
         $data = $this->validate();
 
         if ($this->branch) {

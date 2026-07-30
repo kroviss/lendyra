@@ -1,6 +1,16 @@
 <div>
     <h1 class="mb-6 text-2xl font-semibold">{{ __('Dashboard') }}</h1>
 
+    @can('activate-loans')
+        @if ($pendingCount > 0)
+            <a href="{{ route('loans.index', ['status' => 'pending_approval']) }}"
+                class="mb-4 flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 hover:bg-amber-100">
+                <span>⏳ {{ trans_choice(':count loan is awaiting your approval|:count loans are awaiting your approval', $pendingCount, ['count' => $pendingCount]) }}</span>
+                <span class="font-medium">{{ __('Review') }} →</span>
+            </a>
+        @endif
+    @endcan
+
     <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         @foreach ([
             ['label' => __('Active loans'), 'value' => $activeLoans, 'url' => route('loans.index', ['status' => 'active'])],

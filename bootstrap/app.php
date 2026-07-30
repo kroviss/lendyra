@@ -16,6 +16,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(prepend: [
             \App\Http\Middleware\EnsureInstalled::class,
         ]);
+        $middleware->web(append: [
+            \App\Http\Middleware\EnsureActive::class,
+        ]);
         $middleware->alias([
             'role' => \App\Http\Middleware\EnsureRole::class,
         ]);

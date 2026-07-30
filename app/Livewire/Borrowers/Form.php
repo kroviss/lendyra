@@ -49,6 +49,8 @@ class Form extends Component
 
     public function save(): void
     {
+        \Illuminate\Support\Facades\Gate::authorize('create-loans');
+
         $data = $this->validate();
         unset($data['photo']);
 

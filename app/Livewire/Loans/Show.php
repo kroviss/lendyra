@@ -32,6 +32,7 @@ class Show extends Component
     // Payoff modal state
     public bool $showPayoffModal = false;
     public string $payoffDate = '';
+    public string $payoffMethod = 'cash';
 
     // Collateral modal state
     public bool $showCollateralModal = false;
@@ -71,13 +72,25 @@ class Show extends Component
         try {
             \Illuminate\Support\Facades\Gate::authorize('activate-loans');
 
-            if ($loan->status !== LoanStatus::Approved) {
-                throw new \LogicException(__('Only approved loans can be activated.'));
-            }
+            \Illuminate\Support\Facades\DB::transaction(function () {
+                // Lock + re-check inside the transaction: double-clicks and
+                // concurrent tabs must not disburse twice.
+                $loan = Loan::lockForUpdate()->findOrFail($this->loanId);
 
-            app(LoanScheduleService::class)->generateAndPersist($loan);
-            $loan->update(['status' => LoanStatus::Active, 'disbursed_by' => auth()->id()]);
-            app(\App\Services\LedgerService::class)->postDisbursement($loan);
+                if ($loan->status !== LoanStatus::Approved) {
+                    throw new \LogicException(__('Only approved loans can be activated.'));
+                }
+
+                // Money moves NOW — the schedule anchors on the actual
+                // disbursement date, not the application date.
+                $loan->update(['disbursed_at' => today()]);
+                $loan->refresh();
+
+                app(LoanScheduleService::class)->generateAndPersist($loan);
+                $loan->update(['status' => LoanStatus::Active, 'disbursed_by' => auth()->id()]);
+                app(\App\Services\LedgerService::class)->postDisbursement($loan);
+            });
+
             $this->dispatch('toast', message: __('Loan disbursed and activated'));
         } catch (Throwable $e) {
             $this->actionError = $e->getMessage();
@@ -150,6 +163,12 @@ class Show extends Component
                 $installment->update(['settled_at' => today()]);
             }
 
+            $loan = $this->loan();
+            if ($loan->status === LoanStatus::Active
+                && $loan->installments->every(fn ($i) => $i->isSettled())) {
+                $loan->update(['status' => LoanStatus::Closed, 'closed_at' => today()]);
+            }
+
             $this->dispatch('toast', message: __('Penalty of :amount waived', ['amount' => $waived->toDecimalString()]));
         } catch (Throwable $e) {
             $this->actionError = $e->getMessage();
@@ -177,7 +196,11 @@ class Show extends Component
                 throw new \LogicException(__('Only pending or approved loans can be rejected.'));
             }
 
-            $loan->update(['status' => LoanStatus::Rejected]);
+            $loan->update([
+                'status' => LoanStatus::Rejected,
+                'approved_by' => null,
+                'approved_at' => null,
+            ]);
             $this->dispatch('toast', message: __('Loan rejected'));
         } catch (Throwable $e) {
             $this->actionError = $e->getMessage();
@@ -191,13 +214,15 @@ class Show extends Component
         try {
             \Illuminate\Support\Facades\Gate::authorize('write-off-loans');
 
-            $loan = $this->loan();
+            \Illuminate\Support\Facades\DB::transaction(function () {
+                $loan = Loan::lockForUpdate()->findOrFail($this->loanId);
 
-            if ($loan->status !== LoanStatus::Active) {
-                throw new \LogicException(__('Only active loans can be written off.'));
-            }
+                if ($loan->status !== LoanStatus::Active) {
+                    throw new \LogicException(__('Only active loans can be written off.'));
+                }
 
-            \Illuminate\Support\Facades\DB::transaction(function () use ($loan) {
+                $loan->installments()->lockForUpdate()->get();
+                $loan->unsetRelation('installments');
                 $remaining = $loan->principalOutstanding();
 
                 $loan->update([
@@ -209,6 +234,8 @@ class Show extends Component
                     app(\App\Services\LedgerService::class)->postWriteOff($loan, $remaining);
                 }
             });
+
+            $this->dispatch('toast', message: __('Loan written off'));
         } catch (Throwable $e) {
             $this->actionError = $e->getMessage();
         }
@@ -292,7 +319,9 @@ class Show extends Component
                 'penalty' => $quote->penalty->toDecimalString(),
                 'total' => $quote->total()->toDecimalString(),
             ];
-        } catch (Throwable) {
+        } catch (Throwable $e) {
+            report($e);
+
             return null;
         }
     }
@@ -300,7 +329,10 @@ class Show extends Component
     public function settlePayoff(): void
     {
         $this->actionError = null;
-        $this->validate(['payoffDate' => 'required|date']);
+        $this->validate([
+            'payoffDate' => 'required|date|before_or_equal:today',
+            'payoffMethod' => 'required|in:cash,bank,mobile',
+        ]);
 
         try {
             \Illuminate\Support\Facades\Gate::authorize('payoff-loans');
@@ -308,6 +340,7 @@ class Show extends Component
             app(PayoffService::class)->settle(
                 $this->loan(),
                 new DateTimeImmutable($this->payoffDate),
+                method: $this->payoffMethod,
                 receivedBy: auth()->id(),
             );
 

@@ -18,6 +18,12 @@
             <button onclick="window.print()" class="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white">{{ __('Print') }}</button>
         </div>
 
+        @if ($payment->reversed_at)
+            <div class="mb-4 rounded-lg border-2 border-red-500 py-2 text-center text-xl font-black uppercase tracking-widest text-red-600">
+                {{ __('REVERSED — VOID') }}
+            </div>
+        @endif
+
         <div class="mb-4 border-b border-dashed border-gray-300 pb-4 text-center">
             <h1 class="text-lg font-bold">{{ config('app.name') }}</h1>
             <p class="text-xs text-gray-500">{{ __('Payment Receipt') }} #{{ $payment->id }}</p>

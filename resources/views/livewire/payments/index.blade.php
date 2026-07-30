@@ -12,8 +12,7 @@
             <input type="date" wire:model.live="from" class="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm shadow-sm" />
             <span class="text-gray-400">—</span>
             <input type="date" wire:model.live="to" class="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm shadow-sm" />
-            <button
-                wire:click="$set('from', '{{ today()->format('Y-m-d') }}'); $set('to', '{{ today()->format('Y-m-d') }}')"
+            <button wire:click="setToday"
                 class="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
                 {{ __('Today') }}
             </button>

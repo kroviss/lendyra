@@ -20,7 +20,7 @@
             <a href="{{ route('borrowers.index') }}" class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">← {{ __('Back') }}</a>
             @can('create-loans')
                 <a href="{{ route('borrowers.edit', $borrower->id) }}" class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">{{ __('Edit') }}</a>
-                <a href="{{ route('loans.create') }}" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500">{{ __('New loan') }}</a>
+                <a href="{{ route('loans.create', ['borrower' => $borrower->id]) }}" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500">{{ __('New loan') }}</a>
             @endcan
         </div>
     </div>
@@ -69,18 +69,12 @@
                     <tr class="cursor-pointer border-t border-gray-100 hover:bg-gray-50"
                         x-on:click="window.location = '{{ route('loans.show', $loan) }}'">
                         <td class="px-4 py-2 font-medium">{{ $loan->loan_number }}</td>
-                        <td class="px-4 py-2">{{ $loan->product->name }}</td>
+                        <td class="px-4 py-2">{{ $loan->product?->name }}</td>
                         <td class="px-4 py-2 text-right">{{ $loan->principal()->toDecimalString() }} {{ $loan->currency }}</td>
                         <td class="px-4 py-2 text-right">{{ $loan->principalOutstanding()->toDecimalString() }}</td>
                         <td class="px-4 py-2">{{ $loan->disbursed_at?->format('Y-m-d') }}</td>
                         <td class="px-4 py-2 text-center">
-                            <span class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium {{ match ($loan->status->value) {
-                                'active' => 'bg-green-100 text-green-700',
-                                'approved' => 'bg-blue-100 text-blue-700',
-                                'closed' => 'bg-gray-100 text-gray-600',
-                                'written_off' => 'bg-red-100 text-red-700',
-                                default => 'bg-yellow-100 text-yellow-700',
-                            } }}">{{ str_replace('_', ' ', $loan->status->value) }}</span>
+                            <span class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium {{ $loan->status->badgeClass() }}">{{ $loan->status->label() }}</span>
                         </td>
                     </tr>
                 @empty

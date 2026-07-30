@@ -84,18 +84,24 @@ class SendReminders extends Command
                     }
 
                     $message = $template($installment, $installment->toDue());
-                    $ok = $sender->send($phone, $message);
 
-                    DB::table('sms_logs')->insert([
+                    // Log BEFORE sending: a crash between the two must never
+                    // cause a duplicate SMS on the next run (logged-but-unsent
+                    // is the safer failure mode).
+                    $logId = DB::table('sms_logs')->insertGetId([
                         'loan_installment_id' => $installment->id,
                         'kind' => $kind,
                         'sent_for' => $dueDate,
                         'to' => $phone,
                         'message' => $message,
-                        'status' => $ok ? 'sent' : 'failed',
+                        'status' => 'failed',
                         'created_at' => now(),
                         'updated_at' => now(),
                     ]);
+
+                    if ($sender->send($phone, $message)) {
+                        DB::table('sms_logs')->where('id', $logId)->update(['status' => 'sent', 'updated_at' => now()]);
+                    }
 
                     $count++;
                 }
