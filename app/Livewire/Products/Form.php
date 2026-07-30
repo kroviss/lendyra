@@ -90,6 +90,7 @@ class Form extends Component
             LoanProduct::create($data);
         }
 
+        session()->flash('status', __('Product saved'));
         $this->redirectRoute('products.index');
     }
 

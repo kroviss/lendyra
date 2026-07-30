@@ -31,7 +31,7 @@
                         class="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-50">
                         {{ __('Reject') }}
                     </button>
-                    <button wire:click="activate" wire:loading.attr="disabled"
+                    <button wire:click="activate" wire:confirm="{{ __('Disburse this loan? The schedule will be generated and the disbursement posted to the ledger.') }}" wire:loading.attr="disabled"
                         class="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-500 disabled:opacity-50">
                         {{ __('Disburse & activate') }}
                     </button>
@@ -39,10 +39,12 @@
             @endif
 
             @if ($loan->status === \App\Enums\LoanStatus::Active)
-                <button wire:click="accruePenalties" wire:loading.attr="disabled"
-                    class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
-                    {{ __('Update penalties') }}
-                </button>
+                @can('record-payments')
+                    <button wire:click="accruePenalties" wire:loading.attr="disabled"
+                        class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                        {{ __('Update penalties') }}
+                    </button>
+                @endcan
                 @can('record-payments')
                     <button wire:click="$set('showPaymentModal', true)"
                         class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500">
@@ -183,7 +185,9 @@
         <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
             <div class="mb-3 flex items-center justify-between">
                 <h2 class="text-base font-semibold">{{ __('Collateral') }}</h2>
-                <button wire:click="$set('showCollateralModal', true)" class="text-sm font-medium text-indigo-600 hover:text-indigo-700">+ {{ __('Add') }}</button>
+                @can('create-loans')
+                    <button wire:click="$set('showCollateralModal', true)" class="text-sm font-medium text-indigo-600 hover:text-indigo-700">+ {{ __('Add') }}</button>
+                @endcan
             </div>
             @forelse ($loan->collaterals as $collateral)
                 <div class="flex items-center justify-between border-t border-gray-100 py-2 text-sm">
@@ -219,7 +223,9 @@
         <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
             <div class="mb-3 flex items-center justify-between">
                 <h2 class="text-base font-semibold">{{ __('Guarantors') }}</h2>
-                <button wire:click="$set('showGuarantorModal', true)" class="text-sm font-medium text-indigo-600 hover:text-indigo-700">+ {{ __('Add') }}</button>
+                @can('create-loans')
+                    <button wire:click="$set('showGuarantorModal', true)" class="text-sm font-medium text-indigo-600 hover:text-indigo-700">+ {{ __('Add') }}</button>
+                @endcan
             </div>
             @forelse ($loan->guarantors as $guarantor)
                 <div class="flex items-center justify-between border-t border-gray-100 py-2 text-sm">

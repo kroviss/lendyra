@@ -51,6 +51,7 @@ class Form extends Component
             Branch::create($data);
         }
 
+        session()->flash('status', __('Branch saved'));
         $this->redirectRoute('branches.index');
     }
 

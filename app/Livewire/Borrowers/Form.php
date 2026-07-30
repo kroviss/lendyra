@@ -63,6 +63,7 @@ class Form extends Component
             Borrower::create($data);
         }
 
+        session()->flash('status', __('Borrower saved'));
         $this->redirectRoute('borrowers.index');
     }
 

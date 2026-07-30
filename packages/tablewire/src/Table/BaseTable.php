@@ -49,6 +49,17 @@ abstract class BaseTable extends Component
         return null;
     }
 
+    /**
+     * Extra search fields (plain or relation-dotted) that are searched
+     * without being displayed as columns.
+     *
+     * @return string[]
+     */
+    protected function searchAlso(): array
+    {
+        return [];
+    }
+
     public function mount(): void
     {
         if ($this->perPage <= 0) {
@@ -146,13 +157,20 @@ abstract class BaseTable extends Component
 
         $like = '%'.str_replace(['%', '_'], ['\%', '\_'], $term).'%';
 
-        $query->where(function (Builder $outer) use ($columns, $like) {
-            foreach ($columns as $column) {
-                if (str_contains($column->field, '.')) {
-                    [$relation, $field] = explode('.', $column->field, 2);
-                    $outer->orWhereHas($relation, fn (Builder $sub) => $sub->where($field, 'like', $like));
+        $fields = $columns->map(fn (Column $column) => $column->field)
+            ->merge($this->searchAlso())
+            ->unique()
+            ->values();
+
+        $query->where(function (Builder $outer) use ($fields, $like) {
+            foreach ($fields as $field) {
+                if (str_contains($field, '.')) {
+                    // Support nested relations: "loan.borrower.phone"
+                    $relation = substr($field, 0, strrpos($field, '.'));
+                    $leaf = substr($field, strrpos($field, '.') + 1);
+                    $outer->orWhereHas($relation, fn (Builder $sub) => $sub->where($leaf, 'like', $like));
                 } else {
-                    $outer->orWhere($outer->getModel()->qualifyColumn($column->field), 'like', $like);
+                    $outer->orWhere($outer->getModel()->qualifyColumn($field), 'like', $like);
                 }
             }
         });

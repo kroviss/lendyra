@@ -133,6 +133,7 @@ class Form extends Component
             'created_by' => auth()->id(),
         ]);
 
+        session()->flash('status', __('Loan created — review and disburse when ready'));
         $this->redirectRoute('loans.show', $loan);
     }
 

@@ -77,6 +77,7 @@ class Form extends Component
             User::create($data);
         }
 
+        session()->flash('status', __('User saved'));
         $this->redirectRoute('users.index');
     }
 

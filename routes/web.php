@@ -45,6 +45,7 @@ Route::middleware('auth')->group(function () {
     })->name('logout');
 
     Route::get('/', Dashboard::class)->name('dashboard');
+    Route::get('/profile', \App\Livewire\Profile::class)->name('profile');
 
     Route::get('/borrowers', Borrowers\Index::class)->name('borrowers.index');
     Route::get('/borrowers/create', Borrowers\Form::class)->middleware('role:admin,manager,loan_officer')->name('borrowers.create');
@@ -86,5 +87,6 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::get('/reports/portfolio', \App\Livewire\Reports\Portfolio::class)->name('reports.portfolio');
+    Route::get('/reports/collections', \App\Livewire\Reports\Collections::class)->name('reports.collections');
     Route::get('/reports/trial-balance', \App\Livewire\Reports\TrialBalance::class)->name('reports.trial-balance');
 });

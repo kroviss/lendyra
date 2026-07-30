@@ -20,7 +20,7 @@
                     ['route' => 'borrowers.index', 'label' => __('Borrowers')],
                     ['route' => 'loans.index', 'label' => __('Loans')],
                     ['route' => 'collaterals.index', 'label' => __('Collateral')],
-                    ['route' => 'reports.portfolio', 'label' => __('Reports')],
+                    ['route' => 'reports.portfolio', 'label' => __('Reports'), 'match' => 'reports.*'],
                     in_array(auth()->user()?->role, ['admin', 'manager'], true)
                         ? ['route' => 'products.index', 'label' => __('Loan Products')]
                         : null,
@@ -33,16 +33,16 @@
                 ]) as $item)
                     <a
                         href="{{ route($item['route']) }}"
-                        class="block rounded-lg px-3 py-2 text-sm font-medium {{ request()->routeIs($item['route'].'*') ? 'bg-indigo-50 text-indigo-700' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900' }}"
+                        class="block rounded-lg px-3 py-2 text-sm font-medium {{ request()->routeIs($item['match'] ?? $item['route'].'*') ? 'bg-indigo-50 text-indigo-700' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900' }}"
                     >{{ $item['label'] }}</a>
                 @endforeach
             </nav>
             <div class="border-t border-gray-100 p-3">
                 <div class="flex items-center justify-between gap-2 px-2">
-                    <div class="min-w-0">
+                    <a href="{{ route('profile') }}" class="min-w-0 rounded-md px-1 hover:bg-gray-50">
                         <p class="truncate text-sm font-medium">{{ auth()->user()?->name }}</p>
                         <p class="truncate text-xs text-gray-400">{{ auth()->user()?->role }}</p>
-                    </div>
+                    </a>
                     <form method="POST" action="{{ route('logout') }}">
                         @csrf
                         <button type="submit" class="rounded-md p-2 text-gray-400 hover:bg-gray-50 hover:text-gray-600" title="{{ __('Log out') }}">
@@ -65,5 +65,19 @@
             {{ $slot }}
         </main>
     </div>
+
+    {{-- Toasts --}}
+    <div
+        x-data="{ toasts: [] }"
+        x-on:toast.window="const t = { id: Date.now() + Math.random(), msg: $event.detail.message ?? '' }; toasts.push(t); setTimeout(() => toasts = toasts.filter(x => x.id !== t.id), 3500)"
+        class="fixed bottom-6 right-6 z-50 space-y-2"
+    >
+        <template x-for="t in toasts" :key="t.id">
+            <div class="rounded-lg bg-gray-900 px-4 py-2.5 text-sm text-white shadow-lg" x-text="t.msg"></div>
+        </template>
+    </div>
+    @if (session('status'))
+        <div x-data x-init="$dispatch('toast', { message: @js(session('status')) })"></div>
+    @endif
 </body>
 </html>

@@ -26,7 +26,8 @@ rsync -a "$ROOT/" "$STAGE/" \
 
 cd "$STAGE"
 
-echo "→ Production composer install"
+echo "→ Production composer install (mirrored path repos — real files in the zip)"
+export COMPOSER_MIRROR_PATH_REPOS=1
 composer install --no-dev --optimize-autoloader --no-interaction --quiet
 
 echo "→ Building assets"

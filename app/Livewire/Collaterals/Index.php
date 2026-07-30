@@ -11,9 +11,31 @@ use TableWire\Table\Column;
 
 class Index extends BaseTable
 {
+    public string $statusFilter = '';
+
+    protected function queryString(): array
+    {
+        return parent::queryString() + [
+            'statusFilter' => ['except' => '', 'as' => 'status'],
+        ];
+    }
+
+    public function updatedStatusFilter(): void
+    {
+        $this->resetPage();
+        $this->clearSelection();
+    }
+
     protected function query(): Builder
     {
-        return Collateral::query()->with(['loan.borrower']);
+        return Collateral::query()
+            ->with(['loan.borrower'])
+            ->when($this->statusFilter !== '', fn (Builder $q) => $q->where('status', $this->statusFilter));
+    }
+
+    protected function searchAlso(): array
+    {
+        return ['loan.loan_number', 'loan.borrower.first_name', 'loan.borrower.last_name'];
     }
 
     protected function columns(): array

@@ -29,9 +29,16 @@ class Index extends BaseTable
         ];
     }
 
+    protected function searchAlso(): array
+    {
+        return ['last_name', 'email'];
+    }
+
     public function rowUrl(mixed $row): ?string
     {
-        return route('borrowers.edit', $row);
+        return \Illuminate\Support\Facades\Gate::allows('create-loans')
+            ? route('borrowers.edit', $row)
+            : null;
     }
 
     public function render(): View

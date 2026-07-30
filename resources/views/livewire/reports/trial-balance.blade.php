@@ -3,6 +3,7 @@
         <h1 class="text-2xl font-semibold">{{ __('Trial Balance') }}</h1>
         <div class="flex gap-2 text-sm">
             <a href="{{ route('reports.portfolio') }}" class="rounded-lg border border-gray-300 bg-white px-3 py-1.5 font-medium text-gray-700 hover:bg-gray-50">{{ __('Portfolio') }}</a>
+            <a href="{{ route('reports.collections') }}" class="rounded-lg border border-gray-300 bg-white px-3 py-1.5 font-medium text-gray-700 hover:bg-gray-50">{{ __('Collections') }}</a>
             <span class="rounded-lg bg-indigo-600 px-3 py-1.5 font-medium text-white">{{ __('Trial Balance') }}</span>
         </div>
     </div>

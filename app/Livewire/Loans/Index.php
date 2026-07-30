@@ -10,9 +10,35 @@ use TableWire\Table\Column;
 
 class Index extends BaseTable
 {
+    public string $statusFilter = '';
+
+    protected function queryString(): array
+    {
+        return parent::queryString() + [
+            'statusFilter' => ['except' => '', 'as' => 'status'],
+        ];
+    }
+
+    public function updatedStatusFilter(): void
+    {
+        $this->resetPage();
+        $this->clearSelection();
+    }
+
     protected function query(): Builder
     {
-        return Loan::query()->with(['borrower', 'product']);
+        return Loan::query()
+            ->with(['borrower', 'product'])
+            ->when($this->statusFilter === 'overdue', fn (Builder $q) => $q
+                ->where('status', \App\Enums\LoanStatus::Active)
+                ->whereHas('installments', fn ($i) => $i->whereNull('settled_at')->whereDate('due_date', '<', today())))
+            ->when($this->statusFilter !== '' && $this->statusFilter !== 'overdue',
+                fn (Builder $q) => $q->where('status', $this->statusFilter));
+    }
+
+    protected function searchAlso(): array
+    {
+        return ['borrower.last_name', 'borrower.phone', 'borrower.id_number'];
     }
 
     protected function columns(): array

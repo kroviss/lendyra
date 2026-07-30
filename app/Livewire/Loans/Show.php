@@ -78,6 +78,7 @@ class Show extends Component
             app(LoanScheduleService::class)->generateAndPersist($loan);
             $loan->update(['status' => LoanStatus::Active, 'disbursed_by' => auth()->id()]);
             app(\App\Services\LedgerService::class)->postDisbursement($loan);
+            $this->dispatch('toast', message: __('Loan disbursed and activated'));
         } catch (Throwable $e) {
             $this->actionError = $e->getMessage();
         }
@@ -97,6 +98,7 @@ class Show extends Component
             }
 
             $loan->update(['status' => LoanStatus::Rejected]);
+            $this->dispatch('toast', message: __('Loan rejected'));
         } catch (Throwable $e) {
             $this->actionError = $e->getMessage();
         }
@@ -141,6 +143,7 @@ class Show extends Component
 
             $payment = $this->loan()->payments()->findOrFail($paymentId);
             app(RepaymentService::class)->reverse($payment, auth()->id());
+            $this->dispatch('toast', message: __('Payment reversed'));
         } catch (Throwable $e) {
             $this->actionError = $e->getMessage();
         }
@@ -151,7 +154,15 @@ class Show extends Component
         $this->actionError = null;
 
         try {
+            \Illuminate\Support\Facades\Gate::authorize('record-payments');
+
+            $before = $this->loan()->installments->sum('penalty_minor');
             app(PenaltyService::class)->accrue($this->loan(), new DateTimeImmutable(today()->format('Y-m-d')));
+            $delta = $this->loan()->installments->sum('penalty_minor') - $before;
+
+            $this->dispatch('toast', message: $delta > 0
+                ? __('Penalties updated (+:amount)', ['amount' => Money::minor((int) $delta, $this->loan()->currency, (int) $this->loan()->scale)->toDecimalString()])
+                : __('Penalties are up to date'));
         } catch (Throwable $e) {
             $this->actionError = $e->getMessage();
         }
@@ -163,7 +174,7 @@ class Show extends Component
 
         $this->validate([
             'paymentAmount' => 'required|numeric|min:0.01',
-            'paymentDate' => 'required|date',
+            'paymentDate' => 'required|date|before_or_equal:today|after_or_equal:'.($this->loan()->disbursed_at?->format('Y-m-d') ?? '2000-01-01'),
             'paymentMethod' => 'required|in:cash,bank,mobile',
             'paymentReference' => 'nullable|max:64',
         ]);
@@ -183,6 +194,7 @@ class Show extends Component
             );
 
             $this->reset('showPaymentModal', 'paymentAmount', 'paymentReference');
+            $this->dispatch('toast', message: __('Payment recorded'));
         } catch (Throwable $e) {
             $this->actionError = $e->getMessage();
         }
@@ -220,6 +232,7 @@ class Show extends Component
             );
 
             $this->showPayoffModal = false;
+            $this->dispatch('toast', message: __('Loan settled in full'));
         } catch (Throwable $e) {
             $this->actionError = $e->getMessage();
         }
@@ -227,6 +240,8 @@ class Show extends Component
 
     public function addCollateral(): void
     {
+        \Illuminate\Support\Facades\Gate::authorize('create-loans');
+
         $this->validate([
             'collateralType' => 'required|max:64',
             'collateralDescription' => 'nullable|max:2000',
@@ -248,17 +263,24 @@ class Show extends Component
         ]);
 
         $this->reset('showCollateralModal', 'collateralType', 'collateralDescription', 'collateralValue', 'collateralPhotos');
+        $this->dispatch('toast', message: __('Collateral added'));
     }
 
     public function releaseCollateral(int $collateralId): void
     {
+        \Illuminate\Support\Facades\Gate::authorize('create-loans');
+
         $this->loan()->collaterals()
             ->whereKey($collateralId)
             ->update(['status' => 'released', 'released_at' => today()]);
+
+        $this->dispatch('toast', message: __('Collateral released'));
     }
 
     public function addGuarantor(): void
     {
+        \Illuminate\Support\Facades\Gate::authorize('create-loans');
+
         $this->validate([
             'guarantorName' => 'required|min:2|max:255',
             'guarantorPhone' => 'nullable|max:32',
@@ -272,11 +294,16 @@ class Show extends Component
         ]);
 
         $this->reset('showGuarantorModal', 'guarantorName', 'guarantorPhone', 'guarantorIdNumber');
+        $this->dispatch('toast', message: __('Guarantor added'));
     }
 
     public function removeGuarantor(int $guarantorId): void
     {
+        \Illuminate\Support\Facades\Gate::authorize('create-loans');
+
         $this->loan()->guarantors()->whereKey($guarantorId)->delete();
+
+        $this->dispatch('toast', message: __('Guarantor removed'));
     }
 
     public function render(): View
