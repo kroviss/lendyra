@@ -31,6 +31,18 @@ class Show extends Component
     public bool $showPayoffModal = false;
     public string $payoffDate = '';
 
+    // Collateral modal state
+    public bool $showCollateralModal = false;
+    public string $collateralType = '';
+    public string $collateralDescription = '';
+    public ?float $collateralValue = null;
+
+    // Guarantor modal state
+    public bool $showGuarantorModal = false;
+    public string $guarantorName = '';
+    public string $guarantorPhone = '';
+    public string $guarantorIdNumber = '';
+
     public ?string $actionError = null;
 
     public function mount(int $loan): void
@@ -138,8 +150,58 @@ class Show extends Component
         }
     }
 
+    public function addCollateral(): void
+    {
+        $this->validate([
+            'collateralType' => 'required|max:64',
+            'collateralDescription' => 'nullable|max:2000',
+            'collateralValue' => 'required|numeric|min:0',
+        ]);
+
+        $loan = $this->loan();
+
+        $loan->collaterals()->create([
+            'type' => $this->collateralType,
+            'description' => $this->collateralDescription ?: null,
+            'estimated_value_minor' => Money::of((string) $this->collateralValue, $loan->currency, (int) $loan->scale)->minor,
+        ]);
+
+        $this->reset('showCollateralModal', 'collateralType', 'collateralDescription', 'collateralValue');
+    }
+
+    public function releaseCollateral(int $collateralId): void
+    {
+        $this->loan()->collaterals()
+            ->whereKey($collateralId)
+            ->update(['status' => 'released', 'released_at' => today()]);
+    }
+
+    public function addGuarantor(): void
+    {
+        $this->validate([
+            'guarantorName' => 'required|min:2|max:255',
+            'guarantorPhone' => 'nullable|max:32',
+            'guarantorIdNumber' => 'nullable|max:64',
+        ]);
+
+        $this->loan()->guarantors()->create([
+            'name' => $this->guarantorName,
+            'phone' => $this->guarantorPhone ?: null,
+            'id_number' => $this->guarantorIdNumber ?: null,
+        ]);
+
+        $this->reset('showGuarantorModal', 'guarantorName', 'guarantorPhone', 'guarantorIdNumber');
+    }
+
+    public function removeGuarantor(int $guarantorId): void
+    {
+        $this->loan()->guarantors()->whereKey($guarantorId)->delete();
+    }
+
     public function render(): View
     {
-        return view('livewire.loans.show', ['loan' => $this->loan()]);
+        return view('livewire.loans.show', [
+            'loan' => $this->loan()->load(['collaterals', 'guarantors']),
+        ]);
     }
 }

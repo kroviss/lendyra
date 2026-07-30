@@ -42,11 +42,21 @@ Route::middleware('auth')->group(function () {
     Route::get('/borrowers/create', Borrowers\Form::class)->name('borrowers.create');
     Route::get('/borrowers/{borrower}/edit', Borrowers\Form::class)->name('borrowers.edit');
 
-    Route::get('/products', Products\Index::class)->name('products.index');
-    Route::get('/products/create', Products\Form::class)->name('products.create');
-    Route::get('/products/{product}/edit', Products\Form::class)->name('products.edit');
+    Route::middleware('role:admin,manager')->group(function () {
+        Route::get('/products', Products\Index::class)->name('products.index');
+        Route::get('/products/create', Products\Form::class)->name('products.create');
+        Route::get('/products/{product}/edit', Products\Form::class)->name('products.edit');
+    });
 
     Route::get('/loans', Loans\Index::class)->name('loans.index');
     Route::get('/loans/create', Loans\Form::class)->name('loans.create');
     Route::get('/loans/{loan}', Loans\Show::class)->whereNumber('loan')->name('loans.show');
+
+    Route::get('/loans/{loan}/statement', function (\App\Models\Loan $loan) {
+        return view('loans.statement', [
+            'loan' => $loan->load(['borrower', 'installments', 'payments']),
+        ]);
+    })->whereNumber('loan')->name('loans.statement');
+
+    Route::get('/reports/portfolio', \App\Livewire\Reports\Portfolio::class)->name('reports.portfolio');
 });

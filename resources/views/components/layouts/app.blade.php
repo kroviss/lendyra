@@ -15,12 +15,15 @@
                 <span class="text-lg font-semibold">{{ config('app.name') }}</span>
             </div>
             <nav class="flex-1 space-y-1 p-3">
-                @foreach ([
+                @foreach (array_filter([
                     ['route' => 'dashboard', 'label' => __('Dashboard')],
                     ['route' => 'borrowers.index', 'label' => __('Borrowers')],
                     ['route' => 'loans.index', 'label' => __('Loans')],
-                    ['route' => 'products.index', 'label' => __('Loan Products')],
-                ] as $item)
+                    ['route' => 'reports.portfolio', 'label' => __('Reports')],
+                    in_array(auth()->user()?->role, ['admin', 'manager'], true)
+                        ? ['route' => 'products.index', 'label' => __('Loan Products')]
+                        : null,
+                ]) as $item)
                     <a
                         href="{{ route($item['route']) }}"
                         class="block rounded-lg px-3 py-2 text-sm font-medium {{ request()->routeIs($item['route'].'*') ? 'bg-indigo-50 text-indigo-700' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900' }}"

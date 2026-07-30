@@ -20,6 +20,7 @@
 
         <div class="flex gap-2">
             <a href="{{ route('loans.index') }}" class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">← {{ __('Back') }}</a>
+            <a href="{{ route('loans.statement', $loan) }}" target="_blank" class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">{{ __('Statement') }}</a>
 
             @if ($loan->status === \App\Enums\LoanStatus::Approved)
                 <button wire:click="activate" wire:loading.attr="disabled"
@@ -142,6 +143,90 @@
                     @endforeach
                 </tbody>
             </table>
+        </div>
+    @endif
+
+    {{-- Collaterals & guarantors --}}
+    <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+            <div class="mb-3 flex items-center justify-between">
+                <h2 class="text-base font-semibold">{{ __('Collateral') }}</h2>
+                <button wire:click="$set('showCollateralModal', true)" class="text-sm font-medium text-indigo-600 hover:text-indigo-700">+ {{ __('Add') }}</button>
+            </div>
+            @forelse ($loan->collaterals as $collateral)
+                <div class="flex items-center justify-between border-t border-gray-100 py-2 text-sm">
+                    <div>
+                        <p class="font-medium">{{ $collateral->type }}
+                            @if ($collateral->status === 'released')
+                                <span class="ml-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">{{ __('Released') }} {{ $collateral->released_at?->format('Y-m-d') }}</span>
+                            @endif
+                        </p>
+                        <p class="text-gray-500">{{ $collateral->description }}</p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="font-medium">{{ \LoanEngine\Money::minor((int) $collateral->estimated_value_minor, $loan->currency, (int) $loan->scale)->toDecimalString() }}</span>
+                        @if ($collateral->status === 'held')
+                            <button wire:click="releaseCollateral({{ $collateral->id }})" wire:confirm="{{ __('Release this collateral?') }}" class="text-xs text-gray-400 hover:text-gray-600">{{ __('Release') }}</button>
+                        @endif
+                    </div>
+                </div>
+            @empty
+                <p class="py-4 text-sm text-gray-400">{{ __('No collateral registered.') }}</p>
+            @endforelse
+        </div>
+
+        <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+            <div class="mb-3 flex items-center justify-between">
+                <h2 class="text-base font-semibold">{{ __('Guarantors') }}</h2>
+                <button wire:click="$set('showGuarantorModal', true)" class="text-sm font-medium text-indigo-600 hover:text-indigo-700">+ {{ __('Add') }}</button>
+            </div>
+            @forelse ($loan->guarantors as $guarantor)
+                <div class="flex items-center justify-between border-t border-gray-100 py-2 text-sm">
+                    <div>
+                        <p class="font-medium">{{ $guarantor->name }}</p>
+                        <p class="text-gray-500">{{ $guarantor->phone }} {{ $guarantor->id_number ? '· '.$guarantor->id_number : '' }}</p>
+                    </div>
+                    <button wire:click="removeGuarantor({{ $guarantor->id }})" wire:confirm="{{ __('Remove this guarantor?') }}" class="text-xs text-gray-400 hover:text-red-600">{{ __('Remove') }}</button>
+                </div>
+            @empty
+                <p class="py-4 text-sm text-gray-400">{{ __('No guarantors.') }}</p>
+            @endforelse
+        </div>
+    </div>
+
+    {{-- Collateral modal --}}
+    @if ($showCollateralModal)
+        <div class="fixed inset-0 z-40 flex items-center justify-center bg-gray-900/50 p-4" wire:click.self="$set('showCollateralModal', false)">
+            <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+                <h3 class="mb-4 text-lg font-semibold">{{ __('Add collateral') }}</h3>
+                <div class="space-y-4">
+                    <x-tablewire::inputs.text label="{{ __('Type') }}" wire:model="collateralType" required hint="{{ __('e.g. Vehicle, Land title, Equipment') }}" />
+                    <x-tablewire::inputs.money label="{{ __('Estimated value') }}" wire:model="collateralValue" required />
+                    <x-tablewire::inputs.textarea label="{{ __('Description') }}" wire:model="collateralDescription" rows="2" />
+                </div>
+                <div class="mt-6 flex justify-end gap-3">
+                    <button wire:click="$set('showCollateralModal', false)" class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">{{ __('Cancel') }}</button>
+                    <button wire:click="addCollateral" wire:loading.attr="disabled" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50">{{ __('Add') }}</button>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    {{-- Guarantor modal --}}
+    @if ($showGuarantorModal)
+        <div class="fixed inset-0 z-40 flex items-center justify-center bg-gray-900/50 p-4" wire:click.self="$set('showGuarantorModal', false)">
+            <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+                <h3 class="mb-4 text-lg font-semibold">{{ __('Add guarantor') }}</h3>
+                <div class="space-y-4">
+                    <x-tablewire::inputs.text label="{{ __('Name') }}" wire:model="guarantorName" required />
+                    <x-tablewire::inputs.text label="{{ __('Phone') }}" wire:model="guarantorPhone" />
+                    <x-tablewire::inputs.text label="{{ __('ID number') }}" wire:model="guarantorIdNumber" />
+                </div>
+                <div class="mt-6 flex justify-end gap-3">
+                    <button wire:click="$set('showGuarantorModal', false)" class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">{{ __('Cancel') }}</button>
+                    <button wire:click="addGuarantor" wire:loading.attr="disabled" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50">{{ __('Add') }}</button>
+                </div>
+            </div>
         </div>
     @endif
 
