@@ -86,6 +86,8 @@ class RepaymentService
                 $installment->save();
             }
 
+            app(LedgerService::class)->postPayment($payment->load('allocations', 'loan'));
+
             $allSettled = $installments->every(fn (LoanInstallment $i) => $i->isSettled());
 
             if ($allSettled) {

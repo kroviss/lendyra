@@ -70,6 +70,7 @@ class Show extends Component
 
             app(LoanScheduleService::class)->generateAndPersist($loan);
             $loan->update(['status' => LoanStatus::Active, 'disbursed_by' => auth()->id()]);
+            app(\App\Services\LedgerService::class)->postDisbursement($loan);
         } catch (Throwable $e) {
             $this->actionError = $e->getMessage();
         }

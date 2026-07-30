@@ -1,5 +1,11 @@
 <div>
-    <h1 class="mb-6 text-2xl font-semibold">{{ __('Portfolio Report') }}</h1>
+    <div class="mb-6 flex items-center justify-between">
+        <h1 class="text-2xl font-semibold">{{ __('Portfolio Report') }}</h1>
+        <div class="flex gap-2 text-sm">
+            <span class="rounded-lg bg-indigo-600 px-3 py-1.5 font-medium text-white">{{ __('Portfolio') }}</span>
+            <a href="{{ route('reports.trial-balance') }}" class="rounded-lg border border-gray-300 bg-white px-3 py-1.5 font-medium text-gray-700 hover:bg-gray-50">{{ __('Trial Balance') }}</a>
+        </div>
+    </div>
 
     <div class="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">

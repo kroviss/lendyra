@@ -67,4 +67,5 @@ Route::middleware('auth')->group(function () {
     })->whereNumber('loan')->name('loans.statement');
 
     Route::get('/reports/portfolio', \App\Livewire\Reports\Portfolio::class)->name('reports.portfolio');
+    Route::get('/reports/trial-balance', \App\Livewire\Reports\TrialBalance::class)->name('reports.trial-balance');
 });

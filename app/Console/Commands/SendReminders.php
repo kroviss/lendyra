@@ -1,0 +1,114 @@
+<?php
+
+namespace App\Console\Commands;
+
+use App\Enums\LoanStatus;
+use App\Models\LoanInstallment;
+use App\Services\Sms\HttpSms;
+use App\Services\Sms\LogSms;
+use App\Services\Sms\SmsSender;
+use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
+
+class SendReminders extends Command
+{
+    protected $signature = 'loans:send-reminders {--date= : Treat this date as today (Y-m-d)}';
+
+    protected $description = 'SMS borrowers about upcoming and overdue installments (deduplicated)';
+
+    public function handle(): int
+    {
+        $today = $this->option('date') ? now()->parse($this->option('date')) : today();
+        $daysBefore = (int) config('lms.sms.reminder_days_before', 3);
+
+        $sender = $this->sender();
+        $sent = 0;
+
+        // Upcoming: due exactly N days from now.
+        $sent += $this->process(
+            kind: 'upcoming',
+            dueDate: $today->copy()->addDays($daysBefore)->format('Y-m-d'),
+            template: fn ($i, $due) => __('Reminder: installment of :amount for loan :loan is due on :date.', [
+                'amount' => $due->totalDue()->toDecimalString(),
+                'loan' => $i->loan->loan_number,
+                'date' => $i->due_date->format('Y-m-d'),
+            ]),
+            sender: $sender,
+            query: fn ($q) => $q->whereDate('due_date', $today->copy()->addDays($daysBefore)->format('Y-m-d')),
+        );
+
+        // Overdue: anything unpaid and past due, one notice per week.
+        $sent += $this->process(
+            kind: 'overdue',
+            dueDate: $today->format('Y-m-d'),
+            template: fn ($i, $due) => __('OVERDUE: :amount for loan :loan was due :date. Please pay to avoid further penalties.', [
+                'amount' => $due->totalDue()->toDecimalString(),
+                'loan' => $i->loan->loan_number,
+                'date' => $i->due_date->format('Y-m-d'),
+            ]),
+            sender: $sender,
+            query: fn ($q) => $q->whereDate('due_date', '<', $today->format('Y-m-d'))
+                ->whereRaw('DATEDIFF(?, due_date) % 7 = 0', [$today->format('Y-m-d')]),
+        );
+
+        $this->info("{$sent} reminder(s) sent.");
+
+        return self::SUCCESS;
+    }
+
+    private function process(string $kind, string $dueDate, callable $template, SmsSender $sender, callable $query): int
+    {
+        $count = 0;
+
+        LoanInstallment::query()
+            ->whereNull('settled_at')
+            ->whereHas('loan', fn ($q) => $q->where('status', LoanStatus::Active))
+            ->tap($query)
+            ->with('loan.borrower')
+            ->chunkById(100, function ($installments) use ($kind, $dueDate, $template, $sender, &$count) {
+                foreach ($installments as $installment) {
+                    $phone = $installment->loan->borrower?->phone;
+
+                    if (! $phone) {
+                        continue;
+                    }
+
+                    $alreadySent = DB::table('sms_logs')->where([
+                        'loan_installment_id' => $installment->id,
+                        'kind' => $kind,
+                        'sent_for' => $dueDate,
+                    ])->exists();
+
+                    if ($alreadySent) {
+                        continue;
+                    }
+
+                    $message = $template($installment, $installment->toDue());
+                    $ok = $sender->send($phone, $message);
+
+                    DB::table('sms_logs')->insert([
+                        'loan_installment_id' => $installment->id,
+                        'kind' => $kind,
+                        'sent_for' => $dueDate,
+                        'to' => $phone,
+                        'message' => $message,
+                        'status' => $ok ? 'sent' : 'failed',
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+
+                    $count++;
+                }
+            });
+
+        return $count;
+    }
+
+    private function sender(): SmsSender
+    {
+        return match (config('lms.sms.driver', 'log')) {
+            'http' => new HttpSms,
+            default => new LogSms,
+        };
+    }
+}
