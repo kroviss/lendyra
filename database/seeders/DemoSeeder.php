@@ -55,10 +55,13 @@ class DemoSeeder extends Seeder
         // 2. Healthy annuity loan, 4 payments.
         $loan = $this->activeLoan($biz, $borrowers[1], '9000.00', 12, 'annuity', now()->subMonths(4)->subDays(8));
         $this->payInstallments($repay, $loan, 4);
+        $loan->collaterals()->create(['type' => 'Motorcycle', 'description' => 'Honda XRM 125, 2021 — OR/CR on file', 'estimated_value_minor' => Money::of('2800.00')->minor]);
+        $loan->guarantors()->create(['name' => 'Maria Reyes', 'phone' => '+639171234099', 'relationship' => 'Spouse']);
 
-        // 3. Flat loan fully repaid → Closed.
+        // 3. Flat loan fully repaid → Closed; its collateral released.
         $loan = $this->activeLoan($quick, $borrowers[2], '3000.00', 3, 'flat', now()->subMonths(4)->subDays(3));
         $this->payInstallments($repay, $loan, 3);
+        $loan->collaterals()->create(['type' => 'Gold jewelry', 'description' => '2 rings + necklace, 24k, 31g total', 'estimated_value_minor' => Money::of('3400.00')->minor, 'status' => 'released', 'released_at' => now()->subMonths(1)->format('Y-m-d')]);
 
         // 4. Overdue ~40 days (PAR 30), one payment made, penalties accrued.
         $loan = $this->activeLoan($biz, $borrowers[3], '6000.00', 6, 'declining_equal_principal', now()->subMonths(3)->subDays(10));
@@ -66,18 +69,23 @@ class DemoSeeder extends Seeder
         $loan->collaterals()->create(['type' => 'Land title', 'description' => 'Plot 12, Ruiru — title KJD/1102', 'estimated_value_minor' => Money::of('20000.00')->minor]);
 
         // 5. Overdue 100+ days (PAR 90), nothing paid, penalties accrued.
-        $this->activeLoan($quick, $borrowers[4], '2500.00', 3, 'flat', now()->subMonths(4)->subDays(15));
+        $loan = $this->activeLoan($quick, $borrowers[4], '2500.00', 3, 'flat', now()->subMonths(4)->subDays(15));
+        $loan->collaterals()->create(['type' => 'Electronics', 'description' => 'MacBook Pro 14" 2023, serial C02XL...', 'estimated_value_minor' => Money::of('1600.00')->minor]);
 
         // 6. Interest-only balloon with 2 interest payments.
         $loan = $this->activeLoan($biz, $borrowers[5], '10000.00', 6, 'interest_only_balloon', now()->subMonths(2)->subDays(20));
         $this->payInstallments($repay, $loan, 2);
+        $loan->collaterals()->create(['type' => 'Equipment', 'description' => 'Industrial sewing machines ×4, JUKI DDL-8700', 'estimated_value_minor' => Money::of('12000.00')->minor]);
+        $loan->guarantors()->create(['name' => 'Ousmane Diallo', 'phone' => '+221771234098', 'relationship' => 'Business partner']);
 
         // 7. Weekly-frequency loan with 3 payments.
         $loan = $this->activeLoan($quick, $borrowers[6], '800.00', 8, 'flat', now()->subDays(30), 'weekly');
         $this->payInstallments($repay, $loan, 3);
+        $loan->collaterals()->create(['type' => 'Livestock', 'description' => '3 dairy goats, ear-tagged VN-102..104', 'estimated_value_minor' => Money::of('950.00')->minor]);
 
         // 8. Freshly disbursed, first installment not yet due.
-        $this->activeLoan($biz, $borrowers[7], '4500.00', 12, 'annuity', now()->subDays(6));
+        $loan = $this->activeLoan($biz, $borrowers[7], '4500.00', 12, 'annuity', now()->subDays(6));
+        $loan->guarantors()->create(['name' => 'Susan Ochieng', 'phone' => '+254722345097', 'relationship' => 'Sister']);
 
         // 9. Approved, awaiting disbursement.
         $this->makeLoan($biz, $borrowers[0], '8000.00', 12, 'annuity', now()->addDays(2), LoanStatus::Approved);
