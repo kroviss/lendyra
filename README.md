@@ -1,6 +1,5 @@
-# Loan Management System
+# LoanPilot
 
-> Working name — final product name TBD before launch.
 
 Self-hosted loan management for micro-lenders, MFIs, pawnshops and
 credit cooperatives. Built with Laravel 12+, Livewire 3 and Tailwind CSS.
