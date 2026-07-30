@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Build a distributable zip for marketplace upload.
+# Usage: bash scripts/package.sh [version]
+set -euo pipefail
+
+VERSION="${1:-dev}"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+NAME="$(basename "$ROOT")"
+STAGE="$(mktemp -d)/${NAME}"
+OUT="$ROOT/dist/${NAME}-${VERSION}.zip"
+
+echo "→ Staging to $STAGE"
+mkdir -p "$STAGE" "$ROOT/dist"
+
+# The tablewire path repository must exist as a sibling of the staged app.
+rsync -a "$ROOT/../tablewire/" "$(dirname "$STAGE")/tablewire/" --exclude .git --exclude vendor
+
+rsync -a "$ROOT/" "$STAGE/" \
+    --exclude .git \
+    --exclude node_modules \
+    --exclude vendor \
+    --exclude dist \
+    --exclude .env \
+    --exclude 'storage/app/installed.lock' \
+    --exclude 'storage/logs/*.log' \
+    --exclude 'storage/framework/cache/data/*' \
+    --exclude 'storage/framework/sessions/*' \
+    --exclude 'storage/framework/views/*.php'
+
+cd "$STAGE"
+
+echo "→ Production composer install"
+composer install --no-dev --optimize-autoloader --no-interaction --quiet
+
+echo "→ Building assets"
+npm install --no-audit --no-fund --silent
+npm run build --silent
+rm -rf node_modules
+
+echo "→ Zipping to $OUT"
+rm -f "$OUT"
+cd ..
+if command -v zip >/dev/null; then
+    zip -rq "$OUT" "$NAME"
+else
+    python3 -m zipfile -c "$OUT" "$NAME"
+fi
+
+echo "✓ $(du -h "$OUT" | cut -f1) → $OUT"
