@@ -149,6 +149,8 @@ class InstallController extends Controller
         $content = file_get_contents($path);
 
         foreach ($values as $key => $value) {
+            // Newlines in a submitted value must never become extra .env lines.
+            $value = str_replace(["\r", "\n"], '', $value);
             $escaped = '"'.addcslashes($value, '"\\').'"';
             $line = "{$key}={$escaped}";
 
