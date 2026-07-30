@@ -20,11 +20,14 @@
             <h2 class="text-base font-semibold">{{ __('Collections — last 6 months') }}</h2>
             <span class="text-xs text-gray-400">{{ $chartCurrency }}</span>
         </div>
-        <div class="flex h-40 items-end gap-3">
+        <div class="flex items-end gap-3">
             @foreach ($chartBars as $bar)
                 <div class="group flex flex-1 flex-col items-center gap-1">
                     <span class="text-xs text-gray-400 opacity-0 transition group-hover:opacity-100">{{ $bar['value'] }}</span>
-                    <div class="w-full rounded-t-md bg-indigo-500 transition group-hover:bg-indigo-600" style="height: {{ max(2, $bar['height']) }}%"></div>
+                    {{-- Fixed-height track so the percentage height of the bar resolves --}}
+                    <div class="flex h-32 w-full items-end">
+                        <div class="w-full rounded-t-md bg-indigo-500 transition group-hover:bg-indigo-600" style="height: {{ max(2, $bar['height']) }}%"></div>
+                    </div>
                     <span class="text-xs text-gray-500">{{ $bar['label'] }}</span>
                 </div>
             @endforeach
