@@ -19,6 +19,7 @@
                     ['route' => 'dashboard', 'label' => __('Dashboard')],
                     ['route' => 'borrowers.index', 'label' => __('Borrowers')],
                     ['route' => 'loans.index', 'label' => __('Loans')],
+                    ['route' => 'collaterals.index', 'label' => __('Collateral')],
                     ['route' => 'reports.portfolio', 'label' => __('Reports')],
                     in_array(auth()->user()?->role, ['admin', 'manager'], true)
                         ? ['route' => 'products.index', 'label' => __('Loan Products')]

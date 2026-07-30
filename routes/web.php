@@ -64,6 +64,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/loans/create', Loans\Form::class)->middleware('role:admin,manager,loan_officer')->name('loans.create');
     Route::get('/loans/{loan}', Loans\Show::class)->whereNumber('loan')->name('loans.show');
 
+    Route::get('/collaterals', \App\Livewire\Collaterals\Index::class)->name('collaterals.index');
+
     Route::get('/loans/{loan}/payments/{payment}/receipt', function (\App\Models\Loan $loan, int $payment) {
         return view('loans.receipt', [
             'loan' => $loan->load('borrower'),

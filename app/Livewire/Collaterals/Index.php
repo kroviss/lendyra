@@ -1,0 +1,48 @@
+<?php
+
+namespace App\Livewire\Collaterals;
+
+use App\Models\Collateral;
+use Illuminate\Contracts\Database\Eloquent\Builder;
+use Illuminate\Contracts\View\View;
+use LoanEngine\Money;
+use TableWire\Table\BaseTable;
+use TableWire\Table\Column;
+
+class Index extends BaseTable
+{
+    protected function query(): Builder
+    {
+        return Collateral::query()->with(['loan.borrower']);
+    }
+
+    protected function columns(): array
+    {
+        return [
+            Column::make('loan.loan_number', __('Loan #')),
+            Column::make('loan.borrower.first_name', __('Borrower'))
+                ->format(fn ($value, $row) => $row->loan?->borrower?->fullName()),
+            Column::make('type', __('Type'))->sortable()->searchable(),
+            Column::make('description', __('Description'))->searchable(),
+            Column::make('estimated_value_minor', __('Est. value'))
+                ->right()
+                ->sortable()
+                ->format(fn ($value, $row) => Money::minor((int) $value, $row->loan?->currency ?? 'USD', (int) ($row->loan?->scale ?? 2))->toDecimalString().' '.($row->loan?->currency ?? '')),
+            Column::make('status', __('Status'))->center()->sortable()->badge([
+                'held' => ['label' => __('Held'), 'class' => 'bg-green-100 text-green-700'],
+                'released' => ['label' => __('Released'), 'class' => 'bg-gray-100 text-gray-600'],
+            ]),
+            Column::make('released_at', __('Released'))->date(),
+        ];
+    }
+
+    public function rowUrl(mixed $row): ?string
+    {
+        return $row->loan ? route('loans.show', $row->loan) : null;
+    }
+
+    public function render(): View
+    {
+        return view('livewire.collaterals.index', ['columns' => $this->columns()]);
+    }
+}
