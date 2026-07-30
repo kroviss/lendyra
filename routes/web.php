@@ -8,6 +8,14 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
+Route::prefix('install')->controller(\App\Http\Controllers\InstallController::class)->group(function () {
+    Route::get('/', 'requirements')->name('install.requirements');
+    Route::get('/database', 'database')->name('install.database');
+    Route::post('/database', 'saveDatabase')->name('install.database.save');
+    Route::get('/admin', 'admin')->name('install.admin');
+    Route::post('/admin', 'saveAdmin')->name('install.admin.save');
+});
+
 Route::middleware('guest')->group(function () {
     Route::get('/login', fn () => view('auth.login'))->name('login');
 

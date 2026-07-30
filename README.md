@@ -1,58 +1,64 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Loan Management System
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+> Working name — final product name TBD before launch.
 
-## About Laravel
+Self-hosted loan management for micro-lenders, MFIs, pawnshops and
+credit cooperatives. Built with Laravel 12+, Livewire 3 and Tailwind CSS.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## What makes it different
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+- **Correct interest math** — flat, declining balance, annuity and
+  interest-only/balloon methods; equal-periods or actual-365/360 accrual;
+  month-end due dates that never drift; every schedule proven by a
+  1,600-combination invariant test suite
+- **Real payment engine** — configurable allocation waterfall
+  (penalty → interest → principal, per product), partial payments,
+  overpayment tracking, full audit trail per payment line
+- **Idempotent penalties** — daily accrual with grace days, principal or
+  installment base, and an optional cap; recomputing never double-charges
+- **Any-date payoff quotes** — prorated or full-period interest, future
+  interest always waived
+- **PAR 30/60/90 reporting** — the industry-standard portfolio risk metric
+- **Money is integer minor units everywhere** — no floating point in storage
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## Features
 
-## Learning Laravel
+Borrowers · Guarantors · Collateral registry (add/release) · Loan products
+with per-product engine config · Live schedule preview while creating a
+loan · Disbursement workflow · Payment recording with waterfall breakdown ·
+Early payoff with live quote · Printable statements · Branch + role support
+(admin / manager / loan_officer / cashier / accountant) · Dashboard ·
+Portfolio report · Daily penalty cron · Web installer · Translatable
+(all strings in `lang/en.json`)
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+## Requirements
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+- PHP 8.2+ (pdo_mysql, mbstring, openssl, ctype, curl)
+- MySQL 8 / MariaDB 10.6+
+- Any hosting that runs Laravel (shared hosting OK)
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+## Installation
 
-## Agentic Development
+1. Upload the files, point your web root at `public/`
+2. Visit `https://your-domain/install`
+3. Follow the 3-step wizard: requirements → database → admin account
+4. Set up the cron (penalties + scheduler):
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
-
-```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+```
+* * * * * php /path/to/app/artisan schedule:run >> /dev/null 2>&1
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+Manual install and full docs: see `docs/INSTALL.md`.
 
-## Contributing
+## Tests
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+```bash
+./vendor/bin/phpunit
+```
 
-## Code of Conduct
-
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
-
-## Security Vulnerabilities
-
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+The engine (`src/Engine`) is framework-agnostic and covered by golden-file
+tests with hand-computed expected values.
 
 ## License
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Commercial. One license per installation. See LICENSE.md (TBD before launch).
