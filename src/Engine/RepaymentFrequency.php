@@ -14,7 +14,11 @@ enum RepaymentFrequency: string
     {
         $labels = ['monthly' => 'Monthly', 'biweekly' => 'Biweekly', 'weekly' => 'Weekly'];
 
-        return function_exists('__') ? __($labels[$this->value]) : $labels[$this->value];
+        // Stay framework-agnostic: translate only when a real
+        // translator is bound.
+        return function_exists('app') && app()->bound('translator')
+            ? __($labels[$this->value])
+            : $labels[$this->value];
     }
 
     public function periodsPerYear(): int

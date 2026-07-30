@@ -36,7 +36,7 @@ class Index extends BaseTable
     {
         return LoanPayment::query()
             ->with(['loan.borrower', 'receivedBy'])
-            ->when(auth()->user()?->scopedBranchId(), fn (Builder $q, int $branch) => $q->whereHas('loan', fn ($l) => $l->where('branch_id', $branch)))
+            ->when(auth()->user()?->scopedBranchId(), fn (Builder $q, int $branch) => $q->whereHas('loan', fn ($l) => $l->where(fn ($b) => $b->where('branch_id', $branch)->orWhereNull('branch_id'))))
             ->when($this->methodFilter !== '', fn (Builder $q) => $q->where('method', $this->methodFilter))
             ->when($this->from !== '', fn (Builder $q) => $q->where('paid_at', '>=', $this->from))
             ->when($this->to !== '', fn (Builder $q) => $q->where('paid_at', '<=', $this->to));

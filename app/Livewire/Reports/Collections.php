@@ -48,7 +48,7 @@ class Collections extends Component
         $query = LoanInstallment::query()
             ->whereNull('settled_at')
             ->whereHas('loan', fn ($q) => $q->where('status', LoanStatus::Active)
-                ->when(auth()->user()?->scopedBranchId(), fn ($l, $branch) => $l->where('branch_id', $branch)))
+                ->when(auth()->user()?->scopedBranchId(), fn ($l, $branch) => $l->where(fn ($b) => $b->where('branch_id', $branch)->orWhereNull('branch_id'))))
             ->with(['loan.borrower'])
             ->when($from, fn ($q) => $q->where('due_date', '>=', $from))
             ->where('due_date', '<=', $to)

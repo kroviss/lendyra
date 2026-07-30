@@ -29,7 +29,7 @@ class Index extends BaseTable
     {
         return Loan::query()
             ->with(['borrower', 'product'])
-            ->when(auth()->user()?->scopedBranchId(), fn (Builder $q, int $branch) => $q->where('branch_id', $branch))
+            ->when(auth()->user()?->scopedBranchId(), fn (Builder $q, int $branch) => $q->where(fn ($b) => $b->where('branch_id', $branch)->orWhereNull('branch_id')))
             ->when($this->statusFilter === 'overdue', fn (Builder $q) => $q
                 ->where('status', \App\Enums\LoanStatus::Active)
                 ->whereHas('installments', fn ($i) => $i->whereNull('settled_at')->where('due_date', '<', today())))

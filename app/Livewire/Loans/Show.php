@@ -91,6 +91,26 @@ class Show extends Component
         $this->loanCache = null;
     }
 
+    /** Never surface framework internals (SQL, model class names) to staff. */
+    private function friendlyError(Throwable $e): string
+    {
+        if ($e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException) {
+            return __('That record no longer exists — refresh the page.');
+        }
+
+        if ($e instanceof \Symfony\Component\HttpKernel\Exception\HttpException) {
+            return $e->getMessage() ?: __('You do not have permission to do that.');
+        }
+
+        if ($e instanceof \Illuminate\Database\QueryException) {
+            report($e);
+
+            return __('The database rejected that change. Please try again.');
+        }
+
+        return $e->getMessage();
+    }
+
     public function activate(): void
     {
         $this->actionError = null;
@@ -122,7 +142,7 @@ class Show extends Component
         } catch (\Illuminate\Validation\ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
-            $this->actionError = $e->getMessage();
+            $this->actionError = $this->friendlyError($e);
         }
     }
 
@@ -148,7 +168,7 @@ class Show extends Component
         } catch (\Illuminate\Validation\ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
-            $this->actionError = $e->getMessage();
+            $this->actionError = $this->friendlyError($e);
         }
     }
 
@@ -180,7 +200,7 @@ class Show extends Component
         } catch (\Illuminate\Validation\ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
-            $this->actionError = $e->getMessage();
+            $this->actionError = $this->friendlyError($e);
         }
     }
 
@@ -214,7 +234,7 @@ class Show extends Component
         } catch (\Illuminate\Validation\ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
-            $this->actionError = $e->getMessage();
+            $this->actionError = $this->friendlyError($e);
         }
     }
 
@@ -256,7 +276,7 @@ class Show extends Component
         } catch (\Illuminate\Validation\ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
-            $this->actionError = $e->getMessage();
+            $this->actionError = $this->friendlyError($e);
         }
     }
 
@@ -292,7 +312,7 @@ class Show extends Component
         } catch (\Illuminate\Validation\ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
-            $this->actionError = $e->getMessage();
+            $this->actionError = $this->friendlyError($e);
         }
     }
 
@@ -309,7 +329,7 @@ class Show extends Component
         } catch (\Illuminate\Validation\ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
-            $this->actionError = $e->getMessage();
+            $this->actionError = $this->friendlyError($e);
         }
     }
 
@@ -330,7 +350,7 @@ class Show extends Component
         } catch (\Illuminate\Validation\ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
-            $this->actionError = $e->getMessage();
+            $this->actionError = $this->friendlyError($e);
         }
     }
 
@@ -364,7 +384,7 @@ class Show extends Component
         } catch (\Illuminate\Validation\ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
-            $this->actionError = $e->getMessage();
+            $this->actionError = $this->friendlyError($e);
         }
     }
 
@@ -410,7 +430,7 @@ class Show extends Component
         } catch (\Illuminate\Validation\ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
-            $this->actionError = $e->getMessage();
+            $this->actionError = $this->friendlyError($e);
         }
     }
 
@@ -469,7 +489,7 @@ class Show extends Component
         } catch (\Illuminate\Validation\ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
-            $this->actionError = $e->getMessage();
+            $this->actionError = $this->friendlyError($e);
         }
     }
 
@@ -478,9 +498,9 @@ class Show extends Component
         $this->actionError = null;
 
         try {
-            // Releasing security on a live loan is a management decision.
+            // Releasing security on a live loan is a management decision —
+            // and on a closed loan it is the whole point, so no status gate.
             \Illuminate\Support\Facades\Gate::authorize('write-off-loans');
-            $this->assertLoanMutable();
 
             $this->loan()->collaterals()
                 ->whereKey($collateralId)
@@ -490,7 +510,7 @@ class Show extends Component
         } catch (\Illuminate\Validation\ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
-            $this->actionError = $e->getMessage();
+            $this->actionError = $this->friendlyError($e);
         }
     }
 
@@ -500,6 +520,7 @@ class Show extends Component
 
         try {
             \Illuminate\Support\Facades\Gate::authorize('create-loans');
+            $this->assertLoanMutable();
 
             $collateral = $this->loan()->collaterals()->findOrFail($collateralId);
 
@@ -511,7 +532,7 @@ class Show extends Component
         } catch (\Illuminate\Validation\ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
-            $this->actionError = $e->getMessage();
+            $this->actionError = $this->friendlyError($e);
         }
     }
 
@@ -521,6 +542,7 @@ class Show extends Component
 
         try {
             \Illuminate\Support\Facades\Gate::authorize('write-off-loans');
+            $this->assertLoanMutable();
 
             $this->loan()->collaterals()->whereKey($collateralId)->delete();
 
@@ -528,7 +550,7 @@ class Show extends Component
         } catch (\Illuminate\Validation\ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
-            $this->actionError = $e->getMessage();
+            $this->actionError = $this->friendlyError($e);
         }
     }
 
@@ -538,6 +560,7 @@ class Show extends Component
 
         try {
             \Illuminate\Support\Facades\Gate::authorize('create-loans');
+            $this->assertLoanMutable();
 
             $guarantor = $this->loan()->guarantors()->findOrFail($guarantorId);
 
@@ -550,7 +573,7 @@ class Show extends Component
         } catch (\Illuminate\Validation\ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
-            $this->actionError = $e->getMessage();
+            $this->actionError = $this->friendlyError($e);
         }
     }
 
@@ -592,7 +615,7 @@ class Show extends Component
         } catch (\Illuminate\Validation\ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
-            $this->actionError = $e->getMessage();
+            $this->actionError = $this->friendlyError($e);
         }
     }
 
@@ -610,7 +633,7 @@ class Show extends Component
         } catch (\Illuminate\Validation\ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
-            $this->actionError = $e->getMessage();
+            $this->actionError = $this->friendlyError($e);
         }
     }
 

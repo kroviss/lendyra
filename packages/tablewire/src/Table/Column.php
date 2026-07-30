@@ -86,7 +86,8 @@ class Column
     public function format(Closure $callback, bool $html = false): static
     {
         $this->formatCallback = $callback;
-        $this->html = $html;
+        // Never downgrade a column that already renders markup (actions()).
+        $this->html = $html || $this->html;
 
         return $this;
     }

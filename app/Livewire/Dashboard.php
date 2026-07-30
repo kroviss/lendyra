@@ -15,7 +15,7 @@ class Dashboard extends Component
     public function render(): View
     {
         $branch = auth()->user()?->scopedBranchId();
-        $scope = fn ($q) => $q->when($branch, fn ($qq) => $qq->where('branch_id', $branch));
+        $scope = fn ($q) => $q->when($branch, fn ($qq) => $qq->where(fn ($b) => $b->where('branch_id', $branch)->orWhereNull('branch_id')));
 
         $activeLoans = $scope(Loan::where('status', LoanStatus::Active))->count();
 
@@ -43,7 +43,7 @@ class Dashboard extends Component
             ->count();
 
         $collectedByCurrency = LoanPayment::query()
-            ->when($branch, fn ($q) => $q->whereHas('loan', fn ($l) => $l->where('branch_id', $branch)))
+            ->when($branch, fn ($q) => $q->whereHas('loan', fn ($l) => $l->where(fn ($b) => $b->where('branch_id', $branch)->orWhereNull('branch_id'))))
             ->whereNull('reversed_at')
             ->whereBetween('paid_at', [now()->startOfMonth(), now()->endOfMonth()])
             ->join('loans', 'loans.id', '=', 'loan_payments.loan_id')
@@ -70,7 +70,7 @@ class Dashboard extends Component
         }
 
         $monthly = LoanPayment::query()
-            ->when($branch, fn ($q) => $q->whereHas('loan', fn ($l) => $l->where('branch_id', $branch)))
+            ->when($branch, fn ($q) => $q->whereHas('loan', fn ($l) => $l->where(fn ($b) => $b->where('branch_id', $branch)->orWhereNull('branch_id'))))
             ->whereNull('reversed_at')
             ->where('paid_at', '>=', now()->startOfMonth()->subMonths(5))
             ->whereHas('loan', fn ($q) => $q->where('currency', $primaryCurrency))

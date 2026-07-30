@@ -20,6 +20,10 @@ enum InterestMethod: string
             'interest_only_balloon' => 'Interest-only + balloon',
         ];
 
-        return function_exists('__') ? __($labels[$this->value]) : $labels[$this->value];
+        // Stay framework-agnostic: translate only when a real
+        // translator is bound.
+        return function_exists('app') && app()->bound('translator')
+            ? __($labels[$this->value])
+            : $labels[$this->value];
     }
 }

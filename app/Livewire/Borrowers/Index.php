@@ -14,7 +14,7 @@ class Index extends BaseTable
     {
         return Borrower::query()
             ->withCount('loans')
-            ->when(auth()->user()?->scopedBranchId(), fn (Builder $q, int $branch) => $q->where('branch_id', $branch));
+            ->when(auth()->user()?->scopedBranchId(), fn (Builder $q, int $branch) => $q->where(fn ($b) => $b->where('branch_id', $branch)->orWhereNull('branch_id')));
     }
 
     protected function canExport(): bool

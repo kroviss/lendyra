@@ -149,6 +149,39 @@ class RegressionGuardTest extends TestCase
         $this->assertStringContainsString('Injection', $csv);
     }
 
+    /** Collateral on a settled loan must still be releasable. */
+    public function test_collateral_can_be_released_after_closure(): void
+    {
+        $loan = $this->makeLoan(LoanStatus::WrittenOff);
+        $loan->collaterals()->create(['type' => 'Gold', 'estimated_value_minor' => 100000]);
+        $collateral = $loan->collaterals()->first();
+
+        Livewire::actingAs($this->admin())
+            ->test(\App\Livewire\Loans\Show::class, ['loan' => $loan->id])
+            ->call('releaseCollateral', $collateral->id)
+            ->assertSet('actionError', null);
+
+        $this->assertSame('released', $collateral->fresh()->status);
+    }
+
+    /** Branchless records stay visible in lists too, not just by URL. */
+    public function test_branchless_records_appear_in_scoped_lists(): void
+    {
+        config(['lms.branch_scoping' => true]);
+
+        $branch = \App\Models\Branch::create(['name' => 'S1', 'code' => 'S1-'.uniqid()]);
+        $officer = User::create([
+            'name' => 'Off', 'email' => 'off-'.uniqid().'@example.com',
+            'password' => bcrypt('x'), 'role' => 'loan_officer', 'branch_id' => $branch->id,
+        ]);
+
+        $branchless = $this->makeLoan(branchId: null);
+
+        Livewire::actingAs($officer)
+            ->test(\App\Livewire\Loans\Index::class)
+            ->assertSee($branchless->loan_number);
+    }
+
     /** A rejected application can be revised by its maker. */
     public function test_rejected_loan_is_editable(): void
     {

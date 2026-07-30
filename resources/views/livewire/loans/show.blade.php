@@ -233,6 +233,12 @@
                     <button wire:click="$set('showCollateralModal', true)" class="text-sm font-medium text-indigo-600 hover:text-indigo-700">+ {{ __('Add') }}</button>
                 @endcan
             </div>
+            @if (in_array($loan->status, [\App\Enums\LoanStatus::Closed, \App\Enums\LoanStatus::WrittenOff], true)
+                && $loan->collaterals->where('status', 'held')->isNotEmpty())
+                <p class="mb-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    {{ __('This loan is settled — release the remaining collateral to the borrower.') }}
+                </p>
+            @endif
             @forelse ($loan->collaterals as $collateral)
                 <div class="flex items-center justify-between border-t border-gray-100 py-2 text-sm">
                     <div>
@@ -281,7 +287,11 @@
                 <div class="flex items-center justify-between border-t border-gray-100 py-2 text-sm">
                     <div>
                         <p class="font-medium">{{ $guarantor->name }}</p>
-                        <p class="text-gray-500">{{ $guarantor->phone }} {{ $guarantor->id_number ? '· '.$guarantor->id_number : '' }}</p>
+                        <p class="text-gray-500">
+                            {{ $guarantor->phone }}
+                            {{ $guarantor->id_number ? '· '.$guarantor->id_number : '' }}
+                            {{ $guarantor->relationship ? '· '.$guarantor->relationship : '' }}
+                        </p>
                     </div>
                     <span class="flex items-center gap-3">
                         @can('create-loans')
