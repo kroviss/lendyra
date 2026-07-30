@@ -21,6 +21,12 @@ class Show extends Component
 
     public function deleteBorrower(): void
     {
+        if (config('lms.demo')) {
+            $this->dispatch('toast', message: __('Deleting is disabled in demo mode.'));
+
+            return;
+        }
+
         \Illuminate\Support\Facades\Gate::authorize('create-loans');
 
         $borrower = Borrower::findOrFail($this->borrowerId);
@@ -42,6 +48,9 @@ class Show extends Component
         $borrower = Borrower::with(['loans.product', 'loans.installments'])
             ->findOrFail($this->borrowerId);
 
+        $scoped = auth()->user()?->scopedBranchId();
+        abort_if($scoped !== null && $borrower->branch_id !== null && (int) $borrower->branch_id !== $scoped, 403);
+
         $outstanding = [];
         foreach ($borrower->loans->where('status', LoanStatus::Active) as $loan) {
             $outstanding[$loan->currency] = ($outstanding[$loan->currency] ?? 0) + $loan->principalOutstanding()->minor;
@@ -54,6 +63,7 @@ class Show extends Component
                 ->implode(' · ');
 
         return view('livewire.borrowers.show', [
+            'canDelete' => ! $borrower->loans()->withTrashed()->exists(),
             'borrower' => $borrower,
             'outstandingLabel' => $outstandingLabel,
             'activeCount' => $borrower->loans->where('status', LoanStatus::Active)->count(),

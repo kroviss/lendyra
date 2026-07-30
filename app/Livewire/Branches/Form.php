@@ -59,6 +59,12 @@ class Form extends Component
 
     public function delete(): void
     {
+        if (config('lms.demo')) {
+            $this->dispatch('toast', message: __('Deleting is disabled in demo mode.'));
+
+            return;
+        }
+
         \Illuminate\Support\Facades\Gate::authorize('manage-products');
 
         if (! $this->branch) {

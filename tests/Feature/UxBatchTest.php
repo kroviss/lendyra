@@ -58,10 +58,12 @@ class UxBatchTest extends TestCase
         $collateral = $loan->collaterals()->first();
         $accountant = $this->makeUser('accountant');
 
+        // Denials now surface in the page's error banner instead of
+        // throwing the user out to a full-page 403.
         Livewire::actingAs($accountant)
             ->test(\App\Livewire\Loans\Show::class, ['loan' => $loan->id])
             ->call('releaseCollateral', $collateral->id)
-            ->assertForbidden();
+            ->assertSet('actionError', fn ($error) => $error !== null);
 
         $this->assertSame('held', $collateral->fresh()->status);
     }

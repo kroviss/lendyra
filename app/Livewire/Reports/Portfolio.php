@@ -21,7 +21,9 @@ class Portfolio extends Component
 
         // All aggregation happens in SQL; only overdue loans are hydrated
         // (capped), so the page stays fast on large books.
-        $currencies = Loan::where('status', LoanStatus::Active)->pluck('currency', 'id');
+        $currencies = Loan::where('status', LoanStatus::Active)
+            ->when(auth()->user()?->scopedBranchId(), fn ($q, $branch) => $q->where('branch_id', $branch))
+            ->pluck('currency', 'id');
 
         $outstandingPerLoan = \App\Models\LoanInstallment::query()
             ->whereIn('loan_id', $currencies->keys())

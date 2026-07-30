@@ -51,11 +51,17 @@ class Index extends BaseTable
                 ->right()
                 ->sortable()
                 ->format(fn ($value, $row) => Money::minor((int) $value, $row->loan?->currency ?? 'USD', (int) ($row->loan?->scale ?? 2))->formatted().' '.($row->loan?->currency ?? '')),
+            Column::make('loan.status', __('Loan status'))->center()->format(
+                fn ($value) => $value
+                    ? '<span class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium '.$value->badgeClass().'">'.e($value->label()).'</span>'
+                    : '',
+                html: true
+            ),
             Column::make('status', __('Status'))->center()->sortable()->badge([
                 'held' => ['label' => __('Held'), 'class' => 'bg-green-100 text-green-700'],
                 'released' => ['label' => __('Released'), 'class' => 'bg-gray-100 text-gray-600'],
             ]),
-            Column::make('released_at', __('Released'))->date(),
+            Column::make('released_at', __('Released on'))->date(),
         ];
     }
 

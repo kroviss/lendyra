@@ -41,7 +41,9 @@ enum LoanStatus: string
     /** Statuses whose schedule may still be regenerated. */
     public function scheduleIsMutable(): bool
     {
-        return in_array($this, [self::Draft, self::PendingApproval, self::Approved], true);
+        // Rejected applications stay editable so the maker can revise and
+        // resubmit instead of re-keying the whole thing.
+        return in_array($this, [self::Draft, self::PendingApproval, self::Approved, self::Rejected], true);
     }
 
     public function acceptsPayments(): bool

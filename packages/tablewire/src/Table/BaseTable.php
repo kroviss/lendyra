@@ -219,7 +219,7 @@ abstract class BaseTable extends Component
         $this->applySearch($query);
         $this->applySort($query);
 
-        $columns = collect($this->columns());
+        $columns = collect($this->columns())->filter(fn (Column $c) => $c->exportable)->values();
         $filename = \Illuminate\Support\Str::kebab(class_basename(static::class) === 'Index'
             ? class_basename(dirname(str_replace('\\', '/', static::class)))
             : class_basename(static::class)).'-'.now()->format('Ymd-His').'.csv';
@@ -233,8 +233,11 @@ abstract class BaseTable extends Component
                 foreach ($rows as $row) {
                     fputcsv($out, $columns->map(function (Column $c) use ($row) {
                         $value = $c->render($row);
+                        $value = $c->html ? trim(strip_tags((string) $value)) : (string) $value;
 
-                        return $c->html ? trim(strip_tags((string) $value)) : (string) $value;
+                        // Neutralize spreadsheet formula injection: a cell
+                        // starting with = + - @ or a tab executes in Excel.
+                        return preg_match('/^[=+\-@\t\r]/', $value) ? "'".$value : $value;
                     })->all());
                 }
             });

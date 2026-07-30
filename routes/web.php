@@ -116,6 +116,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/guarantors', \App\Livewire\Guarantors\Index::class)->name('guarantors.index');
 
     Route::get('/loans/{loan}/payments/{payment}/receipt', function (\App\Models\Loan $loan, int $payment) {
+        $scoped = auth()->user()?->scopedBranchId();
+        abort_if($scoped !== null && (int) $loan->branch_id !== $scoped, 403);
+
         return view('loans.receipt', [
             'loan' => $loan->load('borrower'),
             'payment' => $loan->payments()->with(['allocations.installment', 'receivedBy'])->findOrFail($payment),
@@ -123,6 +126,9 @@ Route::middleware('auth')->group(function () {
     })->whereNumber('loan')->whereNumber('payment')->name('loans.receipt');
 
     Route::get('/loans/{loan}/statement', function (\App\Models\Loan $loan) {
+        $scoped = auth()->user()?->scopedBranchId();
+        abort_if($scoped !== null && (int) $loan->branch_id !== $scoped, 403);
+
         $loan->load(['borrower', 'installments', 'payments']);
 
         $nextDue = $loan->installments->first(fn ($i) => ! $i->isSettled());

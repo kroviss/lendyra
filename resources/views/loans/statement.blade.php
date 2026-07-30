@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
 <head>
     <meta charset="utf-8">
     <title>{{ __('Statement') }} — {{ $loan->loan_number }}</title>
@@ -39,8 +39,8 @@
             <div>
                 <h2 class="mb-2 font-semibold text-gray-500">{{ __('Loan terms') }}</h2>
                 <p>{{ __('Principal') }}: <span class="font-medium">{{ $loan->principal()->formatted() }} {{ $loan->currency }}</span></p>
-                <p>{{ __('Rate') }}: {{ $loan->annual_rate }}% / {{ __('yr') }} ({{ str_replace('_', ' ', $loan->method->value) }})</p>
-                <p>{{ __('Term') }}: {{ $loan->term_count }} × {{ $loan->frequency->value }}</p>
+                <p>{{ __('Rate') }}: {{ $loan->annual_rate }}% / {{ __('yr') }} ({{ $loan->method->label() }})</p>
+                <p>{{ __('Term') }}: {{ $loan->term_count }} × {{ $loan->frequency->label() }}</p>
                 <p>{{ __('Disbursed') }}: {{ $loan->disbursed_at?->format('Y-m-d') }}</p>
                 <p>{{ __('Status') }}: {{ $loan->status->label() }}</p>
             </div>
@@ -109,7 +109,7 @@
                     @foreach ($loan->payments->whereNull('reversed_at')->sortBy('paid_at') as $payment)
                         <tr class="border-b border-gray-100">
                             <td class="py-1.5">{{ $payment->paid_at->format('Y-m-d') }}</td>
-                            <td class="py-1.5">{{ $payment->method }}</td>
+                            <td class="py-1.5">{{ __(config('lms.payment_methods.'.$payment->method, $payment->method)) }}</td>
                             <td class="py-1.5">{{ $payment->reference }}</td>
                             <td class="py-1.5 text-right font-medium">{{ $payment->amount()->formatted() }} {{ $loan->currency }}</td>
                         </tr>

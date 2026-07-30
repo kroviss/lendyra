@@ -2,14 +2,16 @@
     'label' => null,
     'name' => null,
     'options' => [],
-    'placeholder' => 'Select...',
-    'searchPlaceholder' => 'Search...',
+    'placeholder' => null,
+    'searchPlaceholder' => null,
     'clearable' => true,
     'hint' => null,
     'required' => false,
 ])
 
 @php
+    $placeholder ??= __('Select...');
+    $searchPlaceholder ??= __('Search...');
     $model = $attributes->whereStartsWith('wire:model')->first();
     $modelName = $attributes->wire('model')->value();
     $name ??= $modelName ?? \Illuminate\Support\Str::random(8);

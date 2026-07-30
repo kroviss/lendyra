@@ -6,7 +6,7 @@
     <title>{{ $title ?? config('app.name') }}</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
-<body class="min-h-screen bg-gray-100 font-sans text-gray-900 antialiased" x-data="{ sidebarOpen: false }">
+<body class="min-h-screen bg-gray-100 font-sans text-gray-900 antialiased" x-data="{ sidebarOpen: false }" x-on:keydown.escape.window="sidebarOpen = false">
     <div class="flex min-h-screen">
         {{-- Mobile top bar --}}
         <div class="fixed inset-x-0 top-0 z-30 flex h-14 items-center gap-3 border-b border-gray-200 bg-white px-4 lg:hidden">
@@ -26,27 +26,30 @@
             <div class="flex h-16 items-center gap-2 border-b border-gray-100 px-5">
                 <div class="flex size-8 items-center justify-center rounded-lg bg-indigo-600 text-sm font-bold text-white">L</div>
                 <span class="text-lg font-semibold">{{ config('app.name') }}</span>
+                <button x-on:click="sidebarOpen = false" class="ml-auto rounded-md p-1.5 text-gray-400 hover:bg-gray-50 lg:hidden" aria-label="{{ __('Close menu') }}">
+                    <svg class="size-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+                </button>
             </div>
             <nav class="flex-1 space-y-1 p-3">
                 @foreach (array_filter([
                     ['route' => 'dashboard', 'label' => __('Dashboard'), 'match' => 'dashboard'],
                     ['route' => 'borrowers.index', 'label' => __('Borrowers'), 'match' => 'borrowers.*'],
                     ['route' => 'loans.index', 'label' => __('Loans'), 'match' => 'loans.*'],
+                    ['route' => 'payments.index', 'label' => __('Payments'), 'match' => 'payments.*'],
                     ['route' => 'collaterals.index', 'label' => __('Collateral'), 'match' => 'collaterals.*'],
                     ['route' => 'guarantors.index', 'label' => __('Guarantors'), 'match' => 'guarantors.*'],
-                    ['route' => 'payments.index', 'label' => __('Payments'), 'match' => 'payments.*'],
                     ['route' => 'reports.collections', 'label' => __('Reports'), 'match' => 'reports.*'],
                     in_array(auth()->user()?->role, ['admin', 'manager'], true)
-                        ? ['route' => 'products.index', 'label' => __('Loan Products')]
+                        ? ['route' => 'products.index', 'label' => __('Loan Products'), 'match' => 'products.*']
                         : null,
                     in_array(auth()->user()?->role, ['admin', 'manager'], true)
-                        ? ['route' => 'branches.index', 'label' => __('Branches')]
+                        ? ['route' => 'branches.index', 'label' => __('Branches'), 'match' => 'branches.*']
                         : null,
                     in_array(auth()->user()?->role, ['admin', 'manager'], true)
-                        ? ['route' => 'sms-logs.index', 'label' => __('SMS Log')]
+                        ? ['route' => 'sms-logs.index', 'label' => __('SMS Log'), 'match' => 'sms-logs.*']
                         : null,
                     auth()->user()?->role === 'admin'
-                        ? ['route' => 'users.index', 'label' => __('Users')]
+                        ? ['route' => 'users.index', 'label' => __('Users'), 'match' => 'users.*']
                         : null,
                 ]) as $item)
                     <a

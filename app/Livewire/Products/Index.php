@@ -39,7 +39,7 @@ class Index extends BaseTable
             Column::make('annual_rate', __('Rate %/yr'))->right()->sortable(),
             Column::make('term_count', __('Term'))->center(),
             Column::make('method', __('Method'))
-                ->format(fn ($value) => str_replace('_', ' ', $value->value)),
+                ->format(fn ($value) => $value->label()),
             Column::make('loans_count', __('Loans'))->center()->sortable(),
             Column::make('is_active', __('Status'))->center()->format(
                 fn ($value) => $value

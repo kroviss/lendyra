@@ -8,7 +8,7 @@
             <p class="mt-1 text-sm text-gray-500">
                 {{ $loan->borrower->fullName() }} · {{ $loan->product->name }} ·
                 {{ $loan->principal()->formatted() }} {{ $loan->currency }} ·
-                {{ $loan->annual_rate }}%/{{ __('yr') }} · {{ $loan->term_count }} {{ $loan->frequency->value }}
+                {{ $loan->annual_rate }}%/{{ __('yr') }} · {{ $loan->term_count }} × {{ $loan->frequency->label() }}
                 @if ((int) $loan->fee_minor > 0)
                     · {{ __('fee') }} {{ \LoanEngine\Money::minor((int) $loan->fee_minor, $loan->currency, (int) $loan->scale)->formatted() }}
                 @endif
@@ -43,7 +43,7 @@
             @php
                 $canDeleteLoan = in_array($loan->status, [\App\Enums\LoanStatus::PendingApproval, \App\Enums\LoanStatus::Approved, \App\Enums\LoanStatus::Rejected], true)
                     && (auth()->user()->can('activate-loans')
-                        || ($loan->status === \App\Enums\LoanStatus::PendingApproval
+                        || (in_array($loan->status, [\App\Enums\LoanStatus::PendingApproval, \App\Enums\LoanStatus::Rejected], true)
                             && (int) $loan->created_by === (int) auth()->id()
                             && auth()->user()->can('create-loans')));
             @endphp
@@ -198,7 +198,7 @@
                         <tr class="border-t border-gray-100 {{ $payment->reversed_at ? 'text-gray-400' : '' }}">
                             <td class="px-4 py-2">{{ $payment->paid_at->format('Y-m-d') }}</td>
                             <td class="px-4 py-2 text-right font-medium {{ $payment->reversed_at ? 'line-through' : '' }}">{{ $payment->amount()->formatted() }}</td>
-                            <td class="px-4 py-2">{{ $payment->method }}</td>
+                            <td class="px-4 py-2">{{ __(config('lms.payment_methods.'.$payment->method, $payment->method)) }}</td>
                             <td class="px-4 py-2">{{ $payment->reference }}</td>
                             <td class="px-4 py-2 text-xs text-gray-500">
                                 @foreach ($payment->allocations as $allocation)
@@ -298,7 +298,7 @@
 
     {{-- Collateral modal --}}
     @if ($showCollateralModal)
-        <div class="fixed inset-0 z-40 flex items-center justify-center bg-gray-900/50 p-4" wire:click.self="$set('showCollateralModal', false)">
+        <div x-data x-on:keydown.escape.window="$wire.set($el.dataset.modal, false)" class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 p-4" wire:click.self="$set('showCollateralModal', false)" data-modal="showCollateralModal">
             <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
                 <h3 class="mb-4 text-lg font-semibold">{{ $editingCollateralId ? __('Edit collateral') : __('Add collateral') }}</h3>
                 <div class="space-y-4">
@@ -315,7 +315,7 @@
                 </div>
                 <div class="mt-6 flex justify-end gap-3">
                     <button wire:click="$set('showCollateralModal', false)" class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">{{ __('Cancel') }}</button>
-                    <button wire:click="addCollateral" wire:loading.attr="disabled" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50">{{ __('Add') }}</button>
+                    <button wire:click="addCollateral" wire:loading.attr="disabled" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50">{{ $editingCollateralId ? __('Save') : __('Add') }}</button>
                 </div>
             </div>
         </div>
@@ -323,17 +323,18 @@
 
     {{-- Guarantor modal --}}
     @if ($showGuarantorModal)
-        <div class="fixed inset-0 z-40 flex items-center justify-center bg-gray-900/50 p-4" wire:click.self="$set('showGuarantorModal', false)">
+        <div x-data x-on:keydown.escape.window="$wire.set($el.dataset.modal, false)" class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 p-4" wire:click.self="$set('showGuarantorModal', false)" data-modal="showGuarantorModal">
             <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
                 <h3 class="mb-4 text-lg font-semibold">{{ $editingGuarantorId ? __('Edit guarantor') : __('Add guarantor') }}</h3>
                 <div class="space-y-4">
                     <x-tablewire::inputs.text label="{{ __('Name') }}" wire:model="guarantorName" required />
                     <x-tablewire::inputs.text label="{{ __('Phone') }}" wire:model="guarantorPhone" />
                     <x-tablewire::inputs.text label="{{ __('ID number') }}" wire:model="guarantorIdNumber" />
+                    <x-tablewire::inputs.text label="{{ __('Relationship') }}" wire:model="guarantorRelationship" hint="{{ __('e.g. Spouse, Brother, Business partner') }}" />
                 </div>
                 <div class="mt-6 flex justify-end gap-3">
                     <button wire:click="$set('showGuarantorModal', false)" class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">{{ __('Cancel') }}</button>
-                    <button wire:click="addGuarantor" wire:loading.attr="disabled" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50">{{ __('Add') }}</button>
+                    <button wire:click="addGuarantor" wire:loading.attr="disabled" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50">{{ $editingGuarantorId ? __('Save') : __('Add') }}</button>
                 </div>
             </div>
         </div>
@@ -341,7 +342,7 @@
 
     {{-- Record payment modal --}}
     @if ($showPaymentModal)
-        <div class="fixed inset-0 z-40 flex items-center justify-center bg-gray-900/50 p-4" wire:click.self="$set('showPaymentModal', false)">
+        <div x-data x-on:keydown.escape.window="$wire.set($el.dataset.modal, false)" class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 p-4" wire:click.self="$set('showPaymentModal', false)" data-modal="showPaymentModal">
             <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
                 <h3 class="mb-4 text-lg font-semibold">{{ __('Record payment') }}</h3>
                 @if ($actionError)
@@ -367,7 +368,7 @@
 
     {{-- Payoff modal --}}
     @if ($showPayoffModal)
-        <div class="fixed inset-0 z-40 flex items-center justify-center bg-gray-900/50 p-4" wire:click.self="$set('showPayoffModal', false)">
+        <div x-data x-on:keydown.escape.window="$wire.set($el.dataset.modal, false)" class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 p-4" wire:click.self="$set('showPayoffModal', false)" data-modal="showPayoffModal">
             <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
                 <h3 class="mb-4 text-lg font-semibold">{{ __('Early payoff') }}</h3>
                 @if ($actionError)

@@ -20,7 +20,7 @@
             <a href="{{ route('borrowers.index') }}" class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">← {{ __('Back') }}</a>
             @can('create-loans')
                 <a href="{{ route('borrowers.edit', $borrower->id) }}" class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">{{ __('Edit') }}</a>
-                @if ($borrower->loans->isEmpty())
+                @if ($canDelete)
                     <button wire:click="deleteBorrower" wire:confirm="{{ __('Delete this borrower?') }}" class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-red-600">{{ __('Delete') }}</button>
                 @endif
                 <a href="{{ route('loans.create', ['borrower' => $borrower->id]) }}" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500">{{ __('New loan') }}</a>

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
 <head>
     <meta charset="utf-8">
     <title>{{ __('Receipt') }} #{{ $payment->id }}</title>
@@ -33,7 +33,7 @@
             <div class="flex justify-between"><dt class="text-gray-500">{{ __('Date') }}</dt><dd>{{ $payment->paid_at->format('Y-m-d') }}</dd></div>
             <div class="flex justify-between"><dt class="text-gray-500">{{ __('Loan') }}</dt><dd class="font-medium">{{ $loan->loan_number }}</dd></div>
             <div class="flex justify-between"><dt class="text-gray-500">{{ __('Borrower') }}</dt><dd>{{ $loan->borrower->fullName() }}</dd></div>
-            <div class="flex justify-between"><dt class="text-gray-500">{{ __('Method') }}</dt><dd>{{ ucfirst($payment->method) }}</dd></div>
+            <div class="flex justify-between"><dt class="text-gray-500">{{ __('Method') }}</dt><dd>{{ __(config('lms.payment_methods.'.$payment->method, $payment->method)) }}</dd></div>
             @if ($payment->reference)
                 <div class="flex justify-between"><dt class="text-gray-500">{{ __('Reference') }}</dt><dd>{{ $payment->reference }}</dd></div>
             @endif

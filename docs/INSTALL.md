@@ -21,7 +21,7 @@ cp .env.example .env
 # edit .env: APP_URL, DB_HOST, DB_DATABASE, DB_USERNAME, DB_PASSWORD, optional DB_PREFIX
 php artisan key:generate
 php artisan migrate --force
-php artisan db:seed --force        # optional demo data (admin@example.com / password)
+php artisan db:seed --force        # optional starter data; creates admin@example.com/password ONLY on an empty database — change it immediately
 touch storage/app/installed.lock   # marks the app as installed
 ```
 
@@ -42,6 +42,20 @@ php artisan loans:accrue-penalties --date=2026-07-01
 
 Accrual is idempotent — running it repeatedly for the same date never
 double-charges.
+
+## Email (password reset)
+
+"Forgot password" emails use Laravel's mail system. Set the `MAIL_*`
+variables in `.env` (SMTP host, port, username, password, from address).
+With the default `MAIL_MAILER=log`, reset links are written to
+`storage/logs/laravel.log` instead of being sent — fine for testing,
+not for production.
+
+## Branch scoping (optional)
+
+Set `LMS_BRANCH_SCOPING=true` to restrict loan officers and cashiers to
+records of their own branch. Admins and managers always see everything.
+Users without a branch are not restricted.
 
 ## Translation
 

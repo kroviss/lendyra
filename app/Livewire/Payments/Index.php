@@ -66,13 +66,13 @@ class Index extends BaseTable
                 html: true
             ),
             Column::make('method', __('Method'))->center()->badge([
-                'cash' => 'bg-green-100 text-green-700',
-                'bank' => 'bg-blue-100 text-blue-700',
-                'mobile' => 'bg-purple-100 text-purple-700',
+                'cash' => ['label' => __('Cash'), 'class' => 'bg-green-100 text-green-700'],
+                'bank' => ['label' => __('Bank transfer'), 'class' => 'bg-blue-100 text-blue-700'],
+                'mobile' => ['label' => __('Mobile money'), 'class' => 'bg-purple-100 text-purple-700'],
             ]),
             Column::make('reference', __('Reference'))->searchable(),
             Column::make('receivedBy.name', __('Received by')),
-            Column::make('id', __(''))->center()->format(
+            Column::make('id', __(''))->actions()->format(
                 fn ($value, $row) => $row->loan
                     ? '<a href="'.route('loans.receipt', [$row->loan_id, $value]).'" target="_blank" onclick="event.stopPropagation()" class="text-xs text-indigo-600 hover:underline">'.e(__('Receipt')).'</a>'
                     : '',

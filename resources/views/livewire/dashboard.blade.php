@@ -16,7 +16,7 @@
             ['label' => __('Active loans'), 'value' => $activeLoans, 'url' => route('loans.index', ['status' => 'active'])],
             ['label' => __('Portfolio outstanding'), 'value' => $outstanding, 'url' => route('loans.index', ['status' => 'active'])],
             ['label' => __('Overdue installments'), 'value' => $overdueCount, 'url' => route('reports.collections', ['window' => 'overdue'])],
-            ['label' => __('Collected this month'), 'value' => $collectedThisMonth, 'url' => route('payments.index', ['from' => now()->startOfMonth()->format('Y-m-d')])],
+            ['label' => __('Collected this month'), 'value' => $collectedThisMonth, 'url' => route('payments.index', ['from' => now()->startOfMonth()->format('Y-m-d'), 'to' => now()->endOfMonth()->format('Y-m-d')])],
         ] as $stat)
             <a href="{{ $stat['url'] }}" class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition hover:border-indigo-200 hover:shadow">
                 <p class="text-sm text-gray-500">{{ $stat['label'] }}</p>

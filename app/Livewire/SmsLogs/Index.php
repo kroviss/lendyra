@@ -44,6 +44,12 @@ class Index extends BaseTable
 
     public function resend(int $logId): void
     {
+        if (! \Illuminate\Support\Facades\RateLimiter::attempt('sms-resend:'.auth()->id(), 10, fn () => true, 60)) {
+            $this->dispatch('toast', message: __('Too many resends — try again in a minute.'));
+
+            return;
+        }
+
         $log = SmsLog::findOrFail($logId);
 
         $ok = \App\Services\Sms\SmsFactory::make()->send($log->to, $log->message);
@@ -70,7 +76,7 @@ class Index extends BaseTable
                 'sent' => 'bg-green-100 text-green-700',
                 'failed' => 'bg-red-100 text-red-700',
             ]),
-            Column::make('id', __(''))->center()->format(
+            Column::make('id', __(''))->actions()->format(
                 fn ($value, $row) => $row->status === 'failed'
                     ? '<button type="button" wire:click.stop="resend('.$value.')" wire:confirm="'.e(__('Resend this SMS?')).'" class="text-xs text-indigo-600 hover:underline">'.e(__('Resend')).'</button>'
                     : '',

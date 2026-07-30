@@ -22,7 +22,9 @@ rsync -a "$ROOT/" "$STAGE/" \
     --exclude 'storage/logs/*.log' \
     --exclude 'storage/framework/cache/data/*' \
     --exclude 'storage/framework/sessions/*' \
-    --exclude 'storage/framework/views/*.php'
+    --exclude 'storage/framework/views/*.php' \
+    --exclude 'storage/app/public/*' \
+    --exclude 'public/storage'
 
 cd "$STAGE"
 

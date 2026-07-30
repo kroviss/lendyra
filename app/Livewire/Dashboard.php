@@ -14,12 +14,15 @@ class Dashboard extends Component
 {
     public function render(): View
     {
-        $activeLoans = Loan::where('status', LoanStatus::Active)->count();
+        $branch = auth()->user()?->scopedBranchId();
+        $scope = fn ($q) => $q->when($branch, fn ($qq) => $qq->where('branch_id', $branch));
+
+        $activeLoans = $scope(Loan::where('status', LoanStatus::Active))->count();
 
         // Sums are kept per currency — minor units of different
         // currencies must never be added together. Aggregated in SQL:
         // hydrating every active loan+installments melts at scale.
-        $currencies = Loan::where('status', LoanStatus::Active)->pluck('currency', 'id');
+        $currencies = $scope(Loan::where('status', LoanStatus::Active))->pluck('currency', 'id');
 
         $sums = \App\Models\LoanInstallment::query()
             ->whereIn('loan_id', $currencies->keys())
@@ -34,12 +37,13 @@ class Dashboard extends Component
         }
 
         $overdueCount = LoanInstallment::query()
-            ->whereHas('loan', fn ($q) => $q->where('status', LoanStatus::Active))
+            ->whereHas('loan', fn ($q) => $scope($q->where('status', LoanStatus::Active)))
             ->whereNull('settled_at')
             ->whereDate('due_date', '<', today())
             ->count();
 
         $collectedByCurrency = LoanPayment::query()
+            ->when($branch, fn ($q) => $q->whereHas('loan', fn ($l) => $l->where('branch_id', $branch)))
             ->whereNull('reversed_at')
             ->whereBetween('paid_at', [now()->startOfMonth(), now()->endOfMonth()])
             ->join('loans', 'loans.id', '=', 'loan_payments.loan_id')
@@ -66,6 +70,7 @@ class Dashboard extends Component
         }
 
         $monthly = LoanPayment::query()
+            ->when($branch, fn ($q) => $q->whereHas('loan', fn ($l) => $l->where('branch_id', $branch)))
             ->whereNull('reversed_at')
             ->whereDate('paid_at', '>=', now()->startOfMonth()->subMonths(5))
             ->whereHas('loan', fn ($q) => $q->where('currency', $primaryCurrency))
@@ -88,7 +93,7 @@ class Dashboard extends Component
             'height' => (int) round($minor / $chartMax * 100),
         ])->values()->all();
 
-        $pendingCount = Loan::where('status', LoanStatus::PendingApproval)->count();
+        $pendingCount = $scope(Loan::where('status', LoanStatus::PendingApproval))->count();
 
         return view('livewire.dashboard', [
             'pendingCount' => $pendingCount,

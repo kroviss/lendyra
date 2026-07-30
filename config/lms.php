@@ -46,6 +46,17 @@ return [
     | "http" POSTs JSON {to, message} to the configured URL — adapt to any
     | local SMS gateway or aggregator.
     */
+    /*
+    |--------------------------------------------------------------------------
+    | Payment method labels
+    |--------------------------------------------------------------------------
+    */
+    'payment_methods' => [
+        'cash' => 'Cash',
+        'bank' => 'Bank transfer',
+        'mobile' => 'Mobile money',
+    ],
+
     'sms' => [
         'driver' => env('LMS_SMS_DRIVER', 'log'),
         'http' => [

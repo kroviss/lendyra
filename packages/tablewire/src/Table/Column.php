@@ -16,6 +16,9 @@ class Column
 
     public bool $html = false;
 
+    /** Action/link columns are skipped by CSV export. */
+    public bool $exportable = true;
+
     protected ?Closure $formatCallback = null;
 
     final protected function __construct(
@@ -47,6 +50,16 @@ class Column
     public function searchable(): static
     {
         $this->searchable = true;
+
+        return $this;
+    }
+
+    /** Mark a column as UI-only (buttons/links) so exports skip it. */
+    public function actions(): static
+    {
+        $this->exportable = false;
+        $this->html = true;
+        $this->align = 'center';
 
         return $this;
     }
