@@ -15,6 +15,9 @@
                 {{ $loan->borrower->fullName() }} · {{ $loan->product->name }} ·
                 {{ $loan->principal()->toDecimalString() }} {{ $loan->currency }} ·
                 {{ $loan->annual_rate }}%/{{ __('yr') }} · {{ $loan->term_count }} {{ $loan->frequency->value }}
+                @if ((int) $loan->fee_minor > 0)
+                    · {{ __('fee') }} {{ \LoanEngine\Money::minor((int) $loan->fee_minor, $loan->currency, (int) $loan->scale)->toDecimalString() }}
+                @endif
             </p>
         </div>
 
@@ -157,6 +160,7 @@
                                 @endforeach
                             </td>
                             <td class="px-4 py-2 text-right">
+                                <a href="{{ route('loans.receipt', [$loan, $payment]) }}" target="_blank" class="mr-2 text-xs text-indigo-500 hover:text-indigo-700">{{ __('Receipt') }}</a>
                                 @if ($payment->reversed_at)
                                     <span class="inline-flex rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">{{ __('Reversed') }}</span>
                                 @else

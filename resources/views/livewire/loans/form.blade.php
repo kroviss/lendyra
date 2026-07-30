@@ -51,6 +51,9 @@
             <h2 class="mb-4 text-base font-semibold">{{ __('Schedule preview') }}</h2>
 
             @if ($schedule = $this->preview)
+                @if ($fee = $this->feePreview)
+                    <p class="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">{{ __('Processing fee (collected at disbursement)') }}: <span class="font-semibold">{{ $fee }}</span></p>
+                @endif
                 <div class="mb-4 grid grid-cols-2 gap-3 text-sm">
                     <div class="rounded-lg bg-gray-50 p-3">
                         <p class="text-gray-500">{{ __('Total interest') }}</p>

@@ -24,10 +24,16 @@ class LedgerService
             date: $loan->disbursed_at->format('Y-m-d'),
             reference: ['loan', $loan->id],
             memo: "Disbursement {$loan->loan_number}",
-            lines: [
-                ['account' => 'portfolio', 'debit' => $loan->principal_minor, 'credit' => 0],
-                ['account' => 'cash', 'debit' => 0, 'credit' => $loan->principal_minor],
-            ],
+            lines: array_merge(
+                [
+                    ['account' => 'portfolio', 'debit' => (int) $loan->principal_minor, 'credit' => 0],
+                    ['account' => 'cash', 'debit' => 0, 'credit' => (int) $loan->principal_minor],
+                ],
+                (int) $loan->fee_minor > 0 ? [
+                    ['account' => 'cash', 'debit' => (int) $loan->fee_minor, 'credit' => 0],
+                    ['account' => 'fee_income', 'debit' => 0, 'credit' => (int) $loan->fee_minor],
+                ] : []
+            ),
             currency: $loan->currency,
         );
     }

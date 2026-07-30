@@ -13,6 +13,12 @@
             <h1 class="text-xl font-semibold text-gray-900">{{ config('app.name') }}</h1>
         </div>
 
+        @if (config('lms.demo'))
+            <p class="mb-4 rounded-lg bg-indigo-50 px-3 py-2 text-sm text-indigo-700">
+                {{ __('Demo') }}: <span class="font-mono">admin@example.com</span> / <span class="font-mono">password</span>
+            </p>
+        @endif
+
         <form method="POST" action="{{ route('login.attempt') }}" class="space-y-4">
             @csrf
 

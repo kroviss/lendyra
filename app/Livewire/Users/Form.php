@@ -49,6 +49,12 @@ class Form extends Component
 
     public function save(): void
     {
+        if (config('lms.demo')) {
+            $this->addError('name', __('Account changes are disabled in demo mode.'));
+
+            return;
+        }
+
         $data = $this->validate();
 
         if ($data['password']) {

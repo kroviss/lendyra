@@ -54,6 +54,15 @@ class Form extends Component
         ];
     }
 
+    /** Processing fee in minor units: principal × % + flat. */
+    private function feeMinor(LoanProduct $product): int
+    {
+        $principal = Money::of((string) $this->amount, $product->currency, (int) $product->scale);
+
+        return $principal->multiply((float) $product->processing_fee_percent / 100)->minor
+            + (int) $product->processing_fee_flat_minor;
+    }
+
     private function buildTerms(LoanProduct $product): LoanTerms
     {
         return new LoanTerms(
@@ -66,6 +75,20 @@ class Form extends Component
             firstDueDate: $this->first_due_date !== '' ? new DateTimeImmutable($this->first_due_date) : null,
             basis: $product->basis,
         );
+    }
+
+    public function getFeePreviewProperty(): ?string
+    {
+        if (! $this->loan_product_id || ! $this->amount) {
+            return null;
+        }
+
+        $product = LoanProduct::find($this->loan_product_id);
+        $fee = $product ? $this->feeMinor($product) : 0;
+
+        return $fee > 0
+            ? Money::minor($fee, $product->currency, (int) $product->scale)->toDecimalString().' '.$product->currency
+            : null;
     }
 
     public function getPreviewProperty(): ?Schedule
@@ -96,6 +119,7 @@ class Form extends Component
             'currency' => $product->currency,
             'scale' => $product->scale,
             'principal_minor' => $terms->principal->minor,
+            'fee_minor' => $this->feeMinor($product),
             'annual_rate' => (float) $this->annual_rate,
             'term_count' => (int) $this->term_count,
             'method' => $product->method->value,

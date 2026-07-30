@@ -14,4 +14,20 @@
             </div>
         @endforeach
     </div>
+
+    <div class="mt-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div class="mb-4 flex items-center justify-between">
+            <h2 class="text-base font-semibold">{{ __('Collections — last 6 months') }}</h2>
+            <span class="text-xs text-gray-400">{{ $chartCurrency }}</span>
+        </div>
+        <div class="flex h-40 items-end gap-3">
+            @foreach ($chartBars as $bar)
+                <div class="group flex flex-1 flex-col items-center gap-1">
+                    <span class="text-xs text-gray-400 opacity-0 transition group-hover:opacity-100">{{ $bar['value'] }}</span>
+                    <div class="w-full rounded-t-md bg-indigo-500 transition group-hover:bg-indigo-600" style="height: {{ max(2, $bar['height']) }}%"></div>
+                    <span class="text-xs text-gray-500">{{ $bar['label'] }}</span>
+                </div>
+            @endforeach
+        </div>
+    </div>
 </div>

@@ -4,6 +4,15 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Demo mode
+    |--------------------------------------------------------------------------
+    | Blocks account changes and enables the nightly demo:reset schedule.
+    | Never enable in production.
+    */
+    'demo' => (bool) env('LMS_DEMO_MODE', false),
+
+    /*
+    |--------------------------------------------------------------------------
     | Ledger account codes
     |--------------------------------------------------------------------------
     | Default chart-of-accounts codes the ledger posts against. They are
@@ -16,6 +25,7 @@ return [
         'penalty_income' => ['code' => '4100', 'name' => 'Penalty Income', 'type' => 'income'],
         'overpayment' => ['code' => '2100', 'name' => 'Borrower Overpayments', 'type' => 'liability'],
         'writeoff_expense' => ['code' => '5000', 'name' => 'Loan Write-off Expense', 'type' => 'expense'],
+        'fee_income' => ['code' => '4200', 'name' => 'Fee Income', 'type' => 'income'],
     ],
 
     /*

@@ -54,11 +54,22 @@ Route::middleware('auth')->group(function () {
         Route::get('/products', Products\Index::class)->name('products.index');
         Route::get('/products/create', Products\Form::class)->name('products.create');
         Route::get('/products/{product}/edit', Products\Form::class)->name('products.edit');
+
+        Route::get('/branches', \App\Livewire\Branches\Index::class)->name('branches.index');
+        Route::get('/branches/create', \App\Livewire\Branches\Form::class)->name('branches.create');
+        Route::get('/branches/{branch}/edit', \App\Livewire\Branches\Form::class)->name('branches.edit');
     });
 
     Route::get('/loans', Loans\Index::class)->name('loans.index');
     Route::get('/loans/create', Loans\Form::class)->middleware('role:admin,manager,loan_officer')->name('loans.create');
     Route::get('/loans/{loan}', Loans\Show::class)->whereNumber('loan')->name('loans.show');
+
+    Route::get('/loans/{loan}/payments/{payment}/receipt', function (\App\Models\Loan $loan, int $payment) {
+        return view('loans.receipt', [
+            'loan' => $loan->load('borrower'),
+            'payment' => $loan->payments()->with(['allocations.installment', 'receivedBy'])->findOrFail($payment),
+        ]);
+    })->whereNumber('loan')->whereNumber('payment')->name('loans.receipt');
 
     Route::get('/loans/{loan}/statement', function (\App\Models\Loan $loan) {
         return view('loans.statement', [

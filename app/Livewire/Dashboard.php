@@ -49,7 +49,43 @@ class Dashboard extends Component
                 }
             });
 
+        // Collections trend, last 6 months, in the portfolio's primary
+        // (most common) currency only — a chart must not mix currencies.
+        $primaryCurrency = Loan::query()
+            ->selectRaw('currency, COUNT(*) as c')
+            ->groupBy('currency')
+            ->orderByDesc('c')
+            ->value('currency') ?? 'USD';
+
+        $chart = [];
+        for ($i = 5; $i >= 0; $i--) {
+            $month = now()->subMonths($i);
+            $chart[$month->format('M')] = 0;
+        }
+
+        LoanPayment::query()
+            ->whereNull('reversed_at')
+            ->whereDate('paid_at', '>=', now()->subMonths(5)->startOfMonth())
+            ->whereHas('loan', fn ($q) => $q->where('currency', $primaryCurrency))
+            ->chunkById(200, function ($payments) use (&$chart) {
+                foreach ($payments as $payment) {
+                    $key = $payment->paid_at->format('M');
+                    if (array_key_exists($key, $chart)) {
+                        $chart[$key] += (int) $payment->amount_minor;
+                    }
+                }
+            });
+
+        $chartMax = max(1, max($chart));
+        $chartBars = collect($chart)->map(fn (int $minor, string $label) => [
+            'label' => $label,
+            'value' => Money::minor($minor, $primaryCurrency)->toDecimalString(),
+            'height' => (int) round($minor / $chartMax * 100),
+        ])->values()->all();
+
         return view('livewire.dashboard', [
+            'chartBars' => $chartBars,
+            'chartCurrency' => $primaryCurrency,
             'activeLoans' => $activeLoans,
             'outstanding' => $this->formatByCurrency($outstandingByCurrency),
             'overdueCount' => $overdueCount,

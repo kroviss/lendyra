@@ -23,6 +23,9 @@
                     in_array(auth()->user()?->role, ['admin', 'manager'], true)
                         ? ['route' => 'products.index', 'label' => __('Loan Products')]
                         : null,
+                    in_array(auth()->user()?->role, ['admin', 'manager'], true)
+                        ? ['route' => 'branches.index', 'label' => __('Branches')]
+                        : null,
                     auth()->user()?->role === 'admin'
                         ? ['route' => 'users.index', 'label' => __('Users')]
                         : null,
@@ -53,6 +56,11 @@
 
         {{-- Main --}}
         <main class="ml-60 flex-1 p-8">
+            @if (config('lms.demo'))
+                <div class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+                    {{ __('Demo mode — data resets nightly; account changes are disabled.') }}
+                </div>
+            @endif
             {{ $slot }}
         </main>
     </div>
