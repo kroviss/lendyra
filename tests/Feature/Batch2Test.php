@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Enums\LoanStatus;
+use App\Livewire\Loans\Form;
+use App\Livewire\Loans\Show;
 use App\Models\Borrower;
 use App\Models\Loan;
 use App\Models\LoanProduct;
@@ -64,7 +66,7 @@ class Batch2Test extends TestCase
         $borrower = Borrower::create(['first_name' => 'Maker', 'last_name' => 'Checker']);
 
         Livewire::actingAs($officer)
-            ->test(\App\Livewire\Loans\Form::class)
+            ->test(Form::class)
             ->set('borrower_id', $borrower->id)
             ->set('loan_product_id', $product->id)
             ->set('amount', 1000.0)
@@ -77,13 +79,13 @@ class Batch2Test extends TestCase
         $this->assertSame(LoanStatus::PendingApproval, $loan->status);
 
         Livewire::actingAs($officer)
-            ->test(\App\Livewire\Loans\Show::class, ['loan' => $loan->id])
+            ->test(Show::class, ['loan' => $loan->id])
             ->call('approve');
         $this->assertSame(LoanStatus::PendingApproval, $loan->fresh()->status);
 
         $manager = $this->makeUser('manager');
         Livewire::actingAs($manager)
-            ->test(\App\Livewire\Loans\Show::class, ['loan' => $loan->id])
+            ->test(Show::class, ['loan' => $loan->id])
             ->call('approve')
             ->assertSet('actionError', null);
 
@@ -99,7 +101,7 @@ class Batch2Test extends TestCase
         $borrower = Borrower::create(['first_name' => 'Direct', 'last_name' => 'Admin']);
 
         Livewire::actingAs($admin)
-            ->test(\App\Livewire\Loans\Form::class)
+            ->test(Form::class)
             ->set('borrower_id', $borrower->id)
             ->set('loan_product_id', $product->id)
             ->set('amount', 1000.0)
@@ -117,7 +119,7 @@ class Batch2Test extends TestCase
         $admin = $this->makeUser('admin');
 
         Livewire::actingAs($admin)
-            ->test(\App\Livewire\Loans\Form::class, ['loan' => $loan])
+            ->test(Form::class, ['loan' => $loan])
             ->assertSet('amount', 3000.0)
             ->set('amount', 4500.0)
             ->call('save');
@@ -135,7 +137,7 @@ class Batch2Test extends TestCase
         $this->actingAs($admin)->get("/loans/{$loan->id}/edit")->assertForbidden();
 
         Livewire::actingAs($admin)
-            ->test(\App\Livewire\Loans\Show::class, ['loan' => $loan->id])
+            ->test(Show::class, ['loan' => $loan->id])
             ->call('deleteLoan')
             ->assertSet('actionError', fn ($e) => $e !== null);
 
@@ -148,7 +150,7 @@ class Batch2Test extends TestCase
         $admin = $this->makeUser('admin');
 
         Livewire::actingAs($admin)
-            ->test(\App\Livewire\Loans\Show::class, ['loan' => $loan->id])
+            ->test(Show::class, ['loan' => $loan->id])
             ->call('deleteLoan');
 
         $this->assertNull(Loan::find($loan->id));
@@ -167,7 +169,7 @@ class Batch2Test extends TestCase
 
         $admin = $this->makeUser('admin');
         Livewire::actingAs($admin)
-            ->test(\App\Livewire\Loans\Show::class, ['loan' => $loan->id])
+            ->test(Show::class, ['loan' => $loan->id])
             ->call('waivePenalty', $first->id)
             ->assertSet('actionError', null);
 
@@ -206,11 +208,16 @@ class Batch2Test extends TestCase
         $cashier = $this->makeUser('cashier');
         $accountant = $this->makeUser('accountant');
 
+        // AuthenticateSession binds the session to a user's password hash —
+        // switching users mid-test needs a fresh session, like a real browser.
         $this->actingAs($cashier)->get('/reports/portfolio')->assertForbidden();
         $this->actingAs($cashier)->get('/reports/collections')->assertOk();
+        $this->flushSession();
         $this->actingAs($accountant)->get('/reports/trial-balance')->assertOk();
 
+        $this->flushSession();
         $this->actingAs($cashier)->get('/sms-logs')->assertForbidden();
+        $this->flushSession();
         $this->actingAs($this->makeUser('manager'))->get('/sms-logs')->assertOk();
     }
 }

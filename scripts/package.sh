@@ -17,14 +17,23 @@ rsync -a "$ROOT/" "$STAGE/" \
     --exclude node_modules \
     --exclude vendor \
     --exclude dist \
+    --exclude scripts \
     --exclude .env \
+    --exclude .phpunit.result.cache \
+    --exclude 'docs/PLAN.md' \
+    --exclude 'docs/MARKETING.md' \
+    --exclude 'database/*.sqlite' \
     --exclude 'storage/app/installed.lock' \
     --exclude 'storage/logs/*.log' \
-    --exclude 'storage/framework/cache/data/*' \
+    --exclude 'storage/framework/cache/*' \
     --exclude 'storage/framework/sessions/*' \
     --exclude 'storage/framework/views/*.php' \
     --exclude 'storage/app/public/*' \
     --exclude 'public/storage'
+
+# rsync excluded the cache contents wholesale — recreate the skeleton the
+# framework expects.
+mkdir -p "$STAGE/storage/framework/cache/data"
 
 cd "$STAGE"
 

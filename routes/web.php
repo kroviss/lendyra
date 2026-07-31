@@ -1,14 +1,27 @@
 <?php
 
+use App\Http\Controllers\InstallController;
 use App\Livewire\Borrowers;
+use App\Livewire\Branches\Form;
+use App\Livewire\Branches\Index;
 use App\Livewire\Dashboard;
 use App\Livewire\Loans;
 use App\Livewire\Products;
+use App\Livewire\Profile;
+use App\Livewire\Reports\Collections;
+use App\Livewire\Reports\Portfolio;
+use App\Livewire\Reports\TrialBalance;
+use App\Models\Loan;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use LoanEngine\Money;
 
-Route::prefix('install')->middleware('throttle:20,1')->controller(\App\Http\Controllers\InstallController::class)->group(function () {
+Route::prefix('install')->middleware('throttle:20,1')->controller(InstallController::class)->group(function () {
     Route::get('/', 'requirements')->name('install.requirements');
     Route::get('/database', 'database')->name('install.database');
     Route::post('/database', 'saveDatabase')->name('install.database.save');
@@ -24,7 +37,7 @@ Route::middleware('guest')->group(function () {
     Route::post('/forgot-password', function (Request $request) {
         $request->validate(['email' => 'required|email']);
 
-        \Illuminate\Support\Facades\Password::sendResetLink($request->only('email'));
+        Password::sendResetLink($request->only('email'));
 
         // Same response either way — never confirm whether an email exists.
         return back()->with('status', __('If that email exists, a reset link has been sent.'));
@@ -42,17 +55,17 @@ Route::middleware('guest')->group(function () {
             'password' => 'required|min:8|confirmed',
         ]);
 
-        $status = \Illuminate\Support\Facades\Password::reset(
+        $status = Password::reset(
             $request->only('email', 'password', 'password_confirmation', 'token'),
             function ($user, string $password) {
                 $user->forceFill([
-                    'password' => \Illuminate\Support\Facades\Hash::make($password),
-                    'remember_token' => \Illuminate\Support\Str::random(60),
+                    'password' => Hash::make($password),
+                    'remember_token' => Str::random(60),
                 ])->save();
             }
         );
 
-        return $status === \Illuminate\Support\Facades\Password::PASSWORD_RESET
+        return $status === Password::PASSWORD_RESET
             ? redirect()->route('login')->with('status', __('Password reset — you can log in now.'))
             : back()->withErrors(['email' => __($status)]);
     })->middleware('throttle:5,1')->name('password.update');
@@ -63,7 +76,7 @@ Route::middleware('guest')->group(function () {
             'password' => 'required',
         ]);
 
-        if (! Auth::attempt($credentials, remember: true)) {
+        if (! Auth::attempt($credentials, remember: $request->boolean('remember'))) {
             return back()->withErrors(['email' => __('Invalid credentials.')])->onlyInput('email');
         }
 
@@ -89,7 +102,7 @@ Route::middleware('auth')->group(function () {
     })->name('logout');
 
     Route::get('/', Dashboard::class)->name('dashboard');
-    Route::get('/profile', \App\Livewire\Profile::class)->name('profile');
+    Route::get('/profile', Profile::class)->name('profile');
 
     Route::get('/borrowers', Borrowers\Index::class)->name('borrowers.index');
     Route::get('/borrowers/create', Borrowers\Form::class)->middleware('role:admin,manager,loan_officer')->name('borrowers.create');
@@ -101,21 +114,39 @@ Route::middleware('auth')->group(function () {
         Route::get('/products/create', Products\Form::class)->name('products.create');
         Route::get('/products/{product}/edit', Products\Form::class)->name('products.edit');
 
-        Route::get('/branches', \App\Livewire\Branches\Index::class)->name('branches.index');
-        Route::get('/branches/create', \App\Livewire\Branches\Form::class)->name('branches.create');
-        Route::get('/branches/{branch}/edit', \App\Livewire\Branches\Form::class)->name('branches.edit');
+        Route::get('/branches', Index::class)->name('branches.index');
+        Route::get('/branches/create', Form::class)->name('branches.create');
+        Route::get('/branches/{branch}/edit', Form::class)->name('branches.edit');
     });
 
     Route::get('/loans', Loans\Index::class)->name('loans.index');
     Route::get('/loans/create', Loans\Form::class)->middleware('role:admin,manager,loan_officer')->name('loans.create');
     Route::get('/loans/{loan}/edit', Loans\Form::class)->whereNumber('loan')->middleware('role:admin,manager,loan_officer')->name('loans.edit');
     Route::get('/loans/{loan}', Loans\Show::class)->whereNumber('loan')->name('loans.show');
-    Route::get('/payments', \App\Livewire\Payments\Index::class)->name('payments.index');
+    Route::get('/payments', App\Livewire\Payments\Index::class)->name('payments.index');
 
-    Route::get('/collaterals', \App\Livewire\Collaterals\Index::class)->name('collaterals.index');
-    Route::get('/guarantors', \App\Livewire\Guarantors\Index::class)->name('guarantors.index');
+    Route::get('/collaterals', App\Livewire\Collaterals\Index::class)->name('collaterals.index');
+    Route::get('/guarantors', App\Livewire\Guarantors\Index::class)->name('guarantors.index');
 
-    Route::get('/loans/{loan}/payments/{payment}/receipt', function (\App\Models\Loan $loan, int $payment) {
+    // Borrower/collateral photos are PII: stored on the private disk and
+    // streamed only to authenticated staff. Falls back to the legacy
+    // public location for files uploaded before the disk change.
+    Route::get('/media/{type}/{filename}', function (string $type, string $filename) {
+        abort_unless(in_array($type, ['borrowers', 'collaterals'], true), 404);
+        abort_if(str_contains($filename, '..'), 404); // no traversal
+
+        $path = $type.'/'.$filename;
+
+        foreach (['local', 'public'] as $disk) {
+            if (Storage::disk($disk)->exists($path)) {
+                return Storage::disk($disk)->response($path);
+            }
+        }
+
+        abort(404);
+    })->where('filename', '[A-Za-z0-9._-]+')->name('media.show');
+
+    Route::get('/loans/{loan}/payments/{payment}/receipt', function (Loan $loan, int $payment) {
         $scoped = auth()->user()?->scopedBranchId();
         abort_if($scoped !== null && $loan->branch_id !== null && (int) $loan->branch_id !== $scoped, 403);
 
@@ -125,7 +156,7 @@ Route::middleware('auth')->group(function () {
         ]);
     })->whereNumber('loan')->whereNumber('payment')->name('loans.receipt');
 
-    Route::get('/loans/{loan}/statement', function (\App\Models\Loan $loan) {
+    Route::get('/loans/{loan}/statement', function (Loan $loan) {
         $scoped = auth()->user()?->scopedBranchId();
         abort_if($scoped !== null && $loan->branch_id !== null && (int) $loan->branch_id !== $scoped, 403);
 
@@ -135,7 +166,7 @@ Route::middleware('auth')->group(function () {
 
         return view('loans.statement', [
             'loan' => $loan,
-            'totalPaid' => \LoanEngine\Money::minor(
+            'totalPaid' => Money::minor(
                 (int) $loan->payments->whereNull('reversed_at')->sum('amount_minor'),
                 $loan->currency, (int) $loan->scale
             ),
@@ -144,13 +175,13 @@ Route::middleware('auth')->group(function () {
     })->whereNumber('loan')->name('loans.statement');
 
     Route::middleware('role:admin')->group(function () {
-        Route::get('/users', \App\Livewire\Users\Index::class)->name('users.index');
-        Route::get('/users/create', \App\Livewire\Users\Form::class)->name('users.create');
-        Route::get('/users/{user}/edit', \App\Livewire\Users\Form::class)->name('users.edit');
+        Route::get('/users', App\Livewire\Users\Index::class)->name('users.index');
+        Route::get('/users/create', App\Livewire\Users\Form::class)->name('users.create');
+        Route::get('/users/{user}/edit', App\Livewire\Users\Form::class)->name('users.edit');
     });
 
-    Route::get('/reports/portfolio', \App\Livewire\Reports\Portfolio::class)->middleware('role:admin,manager,accountant')->name('reports.portfolio');
-    Route::get('/reports/collections', \App\Livewire\Reports\Collections::class)->name('reports.collections');
-    Route::get('/reports/trial-balance', \App\Livewire\Reports\TrialBalance::class)->middleware('role:admin,manager,accountant')->name('reports.trial-balance');
-    Route::get('/sms-logs', \App\Livewire\SmsLogs\Index::class)->middleware('role:admin,manager')->name('sms-logs.index');
+    Route::get('/reports/portfolio', Portfolio::class)->middleware('role:admin,manager,accountant')->name('reports.portfolio');
+    Route::get('/reports/collections', Collections::class)->name('reports.collections');
+    Route::get('/reports/trial-balance', TrialBalance::class)->middleware('role:admin,manager,accountant')->name('reports.trial-balance');
+    Route::get('/sms-logs', App\Livewire\SmsLogs\Index::class)->middleware('role:admin,manager')->name('sms-logs.index');
 });

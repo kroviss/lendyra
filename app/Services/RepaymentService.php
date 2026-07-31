@@ -6,7 +6,6 @@ use App\Enums\LoanStatus;
 use App\Models\Loan;
 use App\Models\LoanInstallment;
 use App\Models\LoanPayment;
-use App\Services\LoanScheduleService;
 use DateTimeImmutable;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -48,6 +47,13 @@ class RepaymentService
             if (! $loan->status->acceptsPayments()) {
                 throw new LogicException("Loan {$loan->loan_number} is {$loan->status->value} and cannot accept payments.");
             }
+
+            // Bring penalties up to the payment date before allocating —
+            // otherwise "pay everything today" amounts miss the days since
+            // last night's cron and auto-close skips them (mirrors
+            // PayoffService::settle(), which accrues as of settlement).
+            app(PenaltyService::class)->accrue($loan, $paidAt);
+            $loan->unsetRelation('installments');
 
             // Lock installments against concurrent payments on the same loan.
             $installments = $loan->installments()->lockForUpdate()->get();
@@ -131,6 +137,14 @@ class RepaymentService
             }
 
             $loan = Loan::lockForUpdate()->findOrFail($payment->loan_id);
+
+            // Reversing a payment on a written-off loan would re-debit the
+            // portfolio with no offsetting adjustment to the write-off
+            // entry and strand dues the loan can no longer accept.
+            if ($loan->status === LoanStatus::WrittenOff) {
+                throw new LogicException(__('Payments on a written-off loan cannot be reversed.'));
+            }
+
             $installments = $loan->installments()->lockForUpdate()->get()->keyBy('id');
 
             foreach ($payment->allocations as $allocation) {

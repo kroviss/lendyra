@@ -3,14 +3,19 @@
 namespace App\Livewire;
 
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Livewire\Component;
 
 class Profile extends Component
 {
     public string $name = '';
+
     public string $current_password = '';
+
     public string $password = '';
+
     public string $password_confirmation = '';
 
     public function mount(): void
@@ -36,9 +41,15 @@ class Profile extends Component
         $user->name = $this->name;
 
         if ($this->password !== '') {
+            // Kill every other session immediately: rehashes the password so
+            // AuthenticateSession's hash binding invalidates them on their
+            // next request. Must run before the new hash is written — it
+            // verifies against the current one.
+            Auth::logoutOtherDevices($this->current_password);
+
             $user->password = Hash::make($this->password);
             // Invalidate stolen remember-me cookies on password change.
-            $user->setRememberToken(\Illuminate\Support\Str::random(60));
+            $user->setRememberToken(Str::random(60));
         }
 
         $user->save();

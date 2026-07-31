@@ -4,33 +4,51 @@ namespace App\Livewire\Borrowers;
 
 use App\Models\Borrower;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Facades\Gate;
 use Livewire\Component;
+use Livewire\WithFileUploads;
 
 class Form extends Component
 {
-    use \Livewire\WithFileUploads;
+    use WithFileUploads;
 
     public ?Borrower $borrower = null;
 
     public $photo = null;
 
     public string $first_name = '';
+
     public string $last_name = '';
+
     public string $phone = '';
+
     public string $email = '';
+
     public string $id_number = '';
+
     public string $address = '';
+
     public string $notes = '';
 
-    public function mount(?int $borrower = null): void
+    public function mount(?Borrower $borrower = null): void
     {
-        if ($borrower !== null) {
-            $this->borrower = Borrower::findOrFail($borrower);
+        if ($borrower !== null && $borrower->exists) {
+            $this->borrower = $borrower;
+
+            // Branch-scoped staff must not read or rewrite another
+            // branch's borrower by URL (branchless records stay open).
+            $this->authorizeBranch($this->borrower);
 
             foreach (['first_name', 'last_name', 'phone', 'email', 'id_number', 'address', 'notes'] as $field) {
                 $this->{$field} = (string) ($this->borrower->{$field} ?? '');
             }
         }
+    }
+
+    private function authorizeBranch(Borrower $borrower): void
+    {
+        $scoped = auth()->user()?->scopedBranchId();
+        abort_if($scoped !== null && $borrower->branch_id !== null && (int) $borrower->branch_id !== $scoped, 403);
     }
 
     protected function rules(): array
@@ -49,16 +67,22 @@ class Form extends Component
 
     public function save(): void
     {
-        \Illuminate\Support\Facades\Gate::authorize('create-loans');
+        Gate::authorize('create-loans');
 
         $data = $this->validate();
         unset($data['photo']);
 
         if ($this->photo) {
-            $data['photo_path'] = $this->photo->store('borrowers', 'public');
+            // Private disk: PII photos are served through the authenticated
+            // /media route, never as world-readable /storage URLs.
+            $data['photo_path'] = $this->photo->store('borrowers', 'local');
         }
 
         if ($this->borrower) {
+            // Re-check on save: mount's check alone would not survive a
+            // forged Livewire snapshot.
+            $this->authorizeBranch($this->borrower);
+
             $this->borrower->update($data);
         } else {
             $data['created_by'] = auth()->id();

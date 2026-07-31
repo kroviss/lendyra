@@ -32,7 +32,7 @@ Portfolio report · Daily penalty cron · Web installer · Translatable
 
 ## Requirements
 
-- PHP 8.2+ (pdo_mysql, mbstring, openssl, ctype, curl)
+- PHP 8.3+ (pdo_mysql, mbstring, openssl, ctype, curl, fileinfo)
 - MySQL 8 / MariaDB 10.6+
 - Any hosting that runs Laravel (shared hosting OK)
 
@@ -51,13 +51,24 @@ Manual install and full docs: see `docs/INSTALL.md`.
 
 ## Tests
 
+The distributed package ships a production (`--no-dev`) vendor directory, so
+PHPUnit is not included. To run the suite, install dev dependencies first:
+
 ```bash
+composer install          # with dev dependencies
 ./vendor/bin/phpunit
 ```
+
+Note: `phpunit.xml` sets `DB_CONNECTION=mysql`, so feature tests run against
+the MySQL database configured in your `.env`. Each test runs inside a
+transaction that is rolled back, but do not point tests at a production
+database.
 
 The engine (`src/Engine`) is framework-agnostic and covered by golden-file
 tests with hand-computed expected values.
 
 ## License
 
-Commercial. One license per installation. See LICENSE.md (TBD before launch).
+Commercial. One license per installation. See [LICENSE.md](LICENSE.md).
+When purchased on CodeCanyon, Envato's standard Regular/Extended licenses
+apply.

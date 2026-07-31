@@ -251,8 +251,8 @@
                         @if ($collateral->photos)
                             <div class="mt-1 flex gap-1.5">
                                 @foreach ($collateral->photos as $photo)
-                                    <a href="{{ asset('storage/'.$photo) }}" target="_blank">
-                                        <img src="{{ asset('storage/'.$photo) }}" class="size-10 rounded-md object-cover ring-1 ring-gray-200" alt="" />
+                                    <a href="{{ url('media/'.$photo) }}" target="_blank">
+                                        <img src="{{ url('media/'.$photo) }}" class="size-10 rounded-md object-cover ring-1 ring-gray-200" alt="" />
                                     </a>
                                 @endforeach
                             </div>

@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Enums\LoanStatus;
+use App\Livewire\Loans\Show;
+use App\Livewire\Users\Form;
 use App\Models\Borrower;
 use App\Models\JournalEntry;
 use App\Models\Loan;
@@ -60,7 +62,7 @@ class PolishBatchTest extends TestCase
         ]);
 
         Livewire::actingAs($this->admin())
-            ->test(\App\Livewire\Loans\Show::class, ['loan' => $loan->id])
+            ->test(Show::class, ['loan' => $loan->id])
             ->call('activate')
             ->assertSet('actionError', null);
 
@@ -87,6 +89,9 @@ class PolishBatchTest extends TestCase
             'name' => 'Off', 'email' => 'off-'.uniqid().'@example.com',
             'password' => bcrypt('x'), 'role' => 'loan_officer',
         ]);
+        // AuthenticateSession binds the session to a user's password hash —
+        // switching users mid-test needs a fresh session, like a real browser.
+        $this->flushSession();
         $this->actingAs($officer)->get('/branches')->assertForbidden();
     }
 
@@ -140,7 +145,7 @@ class PolishBatchTest extends TestCase
         config(['lms.demo' => true]);
 
         Livewire::actingAs($this->admin())
-            ->test(\App\Livewire\Users\Form::class)
+            ->test(Form::class)
             ->set('name', 'Hacker')
             ->set('email', 'hacker@example.com')
             ->set('password', 'password123')

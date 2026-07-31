@@ -81,10 +81,23 @@ final class PayoffQuoter
         if ($terms->basis === AccrualBasis::EqualPeriods) {
             $periodDays = max(1, self::days($periodStart, $current->dueDate));
 
-            return $principalOutstanding->multiply($terms->periodicRate() * min(1, $elapsed / $periodDays));
+            $accrued = $principalOutstanding->multiply($terms->periodicRate() * min(1, $elapsed / $periodDays));
+        } else {
+            $accrued = $principalOutstanding->multiply($terms->dailyRate() * $elapsed);
         }
 
-        return $principalOutstanding->multiply($terms->dailyRate() * $elapsed);
+        // Interest the borrower already paid on the current installment
+        // (e.g. prepaid through an overpayment waterfall) must not be
+        // charged a second time: net it out, floored at zero. FullPeriod
+        // needs no netting — interestDue is already the unpaid remainder.
+        $scheduled = $schedule->installments[$current->number - 1]->interest;
+        $alreadyPaid = max(0, $scheduled->minor - $current->interestDue->minor);
+
+        return Money::minor(
+            max(0, $accrued->minor - $alreadyPaid),
+            $accrued->currency,
+            $accrued->scale,
+        );
     }
 
     private static function days(DateTimeImmutable $from, DateTimeImmutable $to): int

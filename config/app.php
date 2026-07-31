@@ -123,4 +123,18 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Trusted Proxies
+    |--------------------------------------------------------------------------
+    |
+    | Comma-separated list of reverse-proxy IPs (or "*" to trust every
+    | upstream) whose X-Forwarded-* headers may be honoured. Empty means
+    | trust none — otherwise any client could spoof its IP and turn every
+    | per-IP rate limiter (login lockout included) into a no-op.
+    |
+    */
+
+    'trusted_proxies' => env('TRUSTED_PROXIES'),
+
 ];

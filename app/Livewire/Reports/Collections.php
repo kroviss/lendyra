@@ -3,11 +3,13 @@
 namespace App\Livewire\Reports;
 
 use App\Enums\LoanStatus;
+use App\Models\Loan;
 use App\Models\LoanInstallment;
+use App\Support\CurrencyScale;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Facades\DB;
 use Livewire\Component;
 use Livewire\WithPagination;
-use LoanEngine\Money;
 
 /**
  * Forward-looking collections sheet: which installments are expected
@@ -19,6 +21,7 @@ class Collections extends Component
     use WithPagination;
 
     public string $window = 'today';
+
     public string $search = '';
 
     protected $queryString = [
@@ -68,12 +71,12 @@ class Collections extends Component
         $sums = (clone $query)
             ->reorder()
             ->groupBy('loan_id')
-            ->select('loan_id', \Illuminate\Support\Facades\DB::raw(
+            ->select('loan_id', DB::raw(
                 'SUM(CAST(principal_minor AS SIGNED) - CAST(principal_paid_minor AS SIGNED) + CAST(interest_minor AS SIGNED) - CAST(interest_paid_minor AS SIGNED) + CAST(penalty_minor AS SIGNED) - CAST(penalty_paid_minor AS SIGNED)) as due'
             ))
             ->pluck('due', 'loan_id');
 
-        $loanCurrencies = \App\Models\Loan::whereIn('id', $sums->keys())->pluck('currency', 'id');
+        $loanCurrencies = Loan::whereIn('id', $sums->keys())->pluck('currency', 'id');
 
         $totals = [];
         foreach ($sums as $loanId => $due) {
@@ -81,10 +84,11 @@ class Collections extends Component
             $totals[$currency] = ($totals[$currency] ?? 0) + (int) $due;
         }
 
+        $scales = app(CurrencyScale::class);
         $totalLabel = $totals === []
             ? '0.00'
             : collect($totals)
-                ->map(fn (int $minor, string $currency) => Money::minor($minor, $currency)->formatted().' '.$currency)
+                ->map(fn (int $minor, string $currency) => $scales->money($minor, $currency)->formatted().' '.$currency)
                 ->implode(' · ');
 
         return view('livewire.reports.collections', [

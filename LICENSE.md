@@ -1,4 +1,4 @@
-# Lendyra Commercial License (Draft — finalize before launch)
+# Lendyra Commercial License
 
 Copyright (c) 2026 Lendyra. All rights reserved.
 

@@ -3,8 +3,10 @@
 namespace App\Livewire\Payments;
 
 use App\Models\LoanPayment;
+use App\Support\CurrencyScale;
 use Illuminate\Contracts\Database\Eloquent\Builder;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Facades\DB;
 use LoanEngine\Money;
 use TableWire\Table\BaseTable;
 use TableWire\Table\Column;
@@ -12,7 +14,9 @@ use TableWire\Table\Column;
 class Index extends BaseTable
 {
     public string $methodFilter = '';
+
     public string $from = '';
+
     public string $to = '';
 
     protected function queryString(): array
@@ -109,7 +113,7 @@ class Index extends BaseTable
             ->withoutEagerLoads()
             ->join('loans', 'loans.id', '=', 'loan_payments.loan_id')
             ->groupBy('loans.currency', 'loan_payments.method')
-            ->select('loans.currency', 'loan_payments.method', \Illuminate\Support\Facades\DB::raw('SUM(amount_minor) as total'))
+            ->select('loans.currency', 'loan_payments.method', DB::raw('SUM(amount_minor) as total'))
             ->get();
 
         $totals = [];
@@ -119,8 +123,9 @@ class Index extends BaseTable
             $byMethod[$row->method][$row->currency] = ($byMethod[$row->method][$row->currency] ?? 0) + (int) $row->total;
         }
 
+        $scales = app(CurrencyScale::class);
         $format = fn (array $sums) => collect($sums)
-            ->map(fn (int $minor, string $currency) => Money::minor($minor, $currency)->formatted().' '.$currency)
+            ->map(fn (int $minor, string $currency) => $scales->money($minor, $currency)->formatted().' '.$currency)
             ->implode(' · ');
 
         return view('livewire.payments.index', [

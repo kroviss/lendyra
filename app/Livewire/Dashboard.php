@@ -6,9 +6,10 @@ use App\Enums\LoanStatus;
 use App\Models\Loan;
 use App\Models\LoanInstallment;
 use App\Models\LoanPayment;
+use App\Support\CurrencyScale;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Facades\DB;
 use Livewire\Component;
-use LoanEngine\Money;
 
 class Dashboard extends Component
 {
@@ -20,21 +21,21 @@ class Dashboard extends Component
         $activeLoans = $scope(Loan::where('status', LoanStatus::Active))->count();
 
         // Sums are kept per currency — minor units of different
-        // currencies must never be added together. Aggregated in SQL:
-        // hydrating every active loan+installments melts at scale.
-        $currencies = $scope(Loan::where('status', LoanStatus::Active))->pluck('currency', 'id');
+        // currencies must never be added together. One grouped join in
+        // SQL: shipping every active loan ID back into a whereIn melts
+        // at scale. Raw fragments must carry the table prefix themselves.
+        $li = DB::getTablePrefix().'loan_installments';
 
-        $sums = \App\Models\LoanInstallment::query()
-            ->whereIn('loan_id', $currencies->keys())
-            ->groupBy('loan_id')
-            ->select('loan_id', \Illuminate\Support\Facades\DB::raw('SUM(CAST(principal_minor AS SIGNED) - CAST(principal_paid_minor AS SIGNED)) as outstanding'))
-            ->pluck('outstanding', 'loan_id');
-
-        $outstandingByCurrency = [];
-        foreach ($sums as $loanId => $outstanding) {
-            $currency = $currencies[$loanId];
-            $outstandingByCurrency[$currency] = ($outstandingByCurrency[$currency] ?? 0) + (int) $outstanding;
-        }
+        $outstandingByCurrency = LoanInstallment::query()
+            ->join('loans', 'loans.id', '=', 'loan_installments.loan_id')
+            ->whereNull('loans.deleted_at')
+            ->where('loans.status', LoanStatus::Active)
+            ->when($branch, fn ($q) => $q->where(fn ($b) => $b->where('loans.branch_id', $branch)->orWhereNull('loans.branch_id')))
+            ->groupBy('loans.currency')
+            ->select('loans.currency', DB::raw("SUM(CAST({$li}.principal_minor AS SIGNED) - CAST({$li}.principal_paid_minor AS SIGNED)) as outstanding"))
+            ->pluck('outstanding', 'currency')
+            ->map(fn ($outstanding) => (int) $outstanding)
+            ->all();
 
         $overdueCount = LoanInstallment::query()
             ->whereHas('loan', fn ($q) => $scope($q->where('status', LoanStatus::Active)))
@@ -48,7 +49,7 @@ class Dashboard extends Component
             ->whereBetween('paid_at', [now()->startOfMonth(), now()->endOfMonth()])
             ->join('loans', 'loans.id', '=', 'loan_payments.loan_id')
             ->groupBy('loans.currency')
-            ->select('loans.currency', \Illuminate\Support\Facades\DB::raw('SUM(amount_minor) as total'))
+            ->select('loans.currency', DB::raw('SUM(amount_minor) as total'))
             ->pluck('total', 'currency')
             ->map(fn ($v) => (int) $v)
             ->all();
@@ -76,8 +77,8 @@ class Dashboard extends Component
             ->whereHas('loan', fn ($q) => $q->where('currency', $primaryCurrency))
             ->groupBy('ym')
             ->select(
-                \Illuminate\Support\Facades\DB::raw("DATE_FORMAT(paid_at, '%Y-%m') as ym"),
-                \Illuminate\Support\Facades\DB::raw('SUM(amount_minor) as total')
+                DB::raw("DATE_FORMAT(paid_at, '%Y-%m') as ym"),
+                DB::raw('SUM(amount_minor) as total')
             )
             ->pluck('total', 'ym');
 
@@ -87,9 +88,10 @@ class Dashboard extends Component
         }
 
         $chartMax = max(1, max($chart));
+        $scales = app(CurrencyScale::class);
         $chartBars = collect($chart)->map(fn (int $minor, string $label) => [
             'label' => $label,
-            'value' => Money::minor($minor, $primaryCurrency)->formatted(),
+            'value' => $scales->money($minor, $primaryCurrency)->formatted(),
             'height' => (int) round($minor / $chartMax * 100),
         ])->values()->all();
 
@@ -112,8 +114,10 @@ class Dashboard extends Component
             return '0.00';
         }
 
+        $scales = app(CurrencyScale::class);
+
         return collect($byCurrency)
-            ->map(fn (int $minor, string $currency) => Money::minor($minor, $currency)->formatted().' '.$currency)
+            ->map(fn (int $minor, string $currency) => $scales->money($minor, $currency)->formatted().' '.$currency)
             ->implode(' · ');
     }
 }

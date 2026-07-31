@@ -2,8 +2,11 @@
 
 namespace App\Livewire\Branches;
 
+use App\Models\Borrower;
 use App\Models\Branch;
+use App\Models\LoanPayment;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Livewire\Component;
 
@@ -12,15 +15,19 @@ class Form extends Component
     public ?Branch $branch = null;
 
     public string $name = '';
+
     public string $code = '';
+
     public string $phone = '';
+
     public string $address = '';
+
     public bool $is_active = true;
 
-    public function mount(?int $branch = null): void
+    public function mount(Branch|int|null $branch = null): void
     {
         if ($branch !== null) {
-            $this->branch = Branch::findOrFail($branch);
+            $this->branch = $branch instanceof Branch ? $branch : Branch::findOrFail($branch);
 
             $this->name = $this->branch->name;
             $this->code = $this->branch->code;
@@ -43,7 +50,7 @@ class Form extends Component
 
     public function save(): void
     {
-        \Illuminate\Support\Facades\Gate::authorize('manage-products');
+        Gate::authorize('manage-products');
 
         $data = $this->validate();
 
@@ -65,14 +72,20 @@ class Form extends Component
             return;
         }
 
-        \Illuminate\Support\Facades\Gate::authorize('manage-products');
+        Gate::authorize('manage-products');
 
         if (! $this->branch) {
             return;
         }
 
-        if ($this->branch->users()->exists() || $this->branch->loans()->withTrashed()->exists()) {
-            $this->addError('name', __('Cannot delete: users or loans are attached to this branch.'));
+        // Borrowers and payments count too: deleting would null their
+        // branch_id, and under branch scoping a NULL branch means
+        // "visible to every branch".
+        if ($this->branch->users()->exists()
+            || $this->branch->loans()->withTrashed()->exists()
+            || Borrower::where('branch_id', $this->branch->id)->exists()
+            || LoanPayment::where('branch_id', $this->branch->id)->exists()) {
+            $this->addError('name', __('Cannot delete: users, borrowers, loans or payments are attached to this branch.'));
 
             return;
         }

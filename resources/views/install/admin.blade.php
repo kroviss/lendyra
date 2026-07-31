@@ -5,6 +5,10 @@
         <p class="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{{ $errors->first() }}</p>
     @endif
 
+    @if (session('install.storage_link_warning'))
+        <p class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">{{ session('install.storage_link_warning') }}</p>
+    @endif
+
     <form method="POST" action="{{ route('install.admin.save') }}" class="space-y-4">
         @csrf
         <div>

@@ -4,7 +4,11 @@ namespace App\Livewire\Reports;
 
 use App\Enums\LoanStatus;
 use App\Models\Loan;
+use App\Models\LoanInstallment;
+use App\Support\CurrencyScale;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Livewire\Component;
 use LoanEngine\Money;
 
@@ -19,45 +23,58 @@ class Portfolio extends Component
     {
         $today = today();
 
-        // All aggregation happens in SQL; only overdue loans are hydrated
+        // All aggregation happens in SQL via a grouped join — no active
+        // loan-ID round trip — and only overdue loans are hydrated
         // (capped), so the page stays fast on large books.
-        $currencies = Loan::where('status', LoanStatus::Active)
-            ->when(auth()->user()?->scopedBranchId(), fn ($q, $branch) => $q->where(fn ($b) => $b->where('branch_id', $branch)->orWhereNull('branch_id')))
-            ->pluck('currency', 'id');
+        $branch = auth()->user()?->scopedBranchId();
+        $activeLoans = fn ($q) => $q
+            ->whereNull('loans.deleted_at')
+            ->where('loans.status', LoanStatus::Active)
+            ->when($branch, fn ($qq) => $qq->where(fn ($b) => $b->where('loans.branch_id', $branch)->orWhereNull('loans.branch_id')));
 
-        $outstandingPerLoan = \App\Models\LoanInstallment::query()
-            ->whereIn('loan_id', $currencies->keys())
-            ->groupBy('loan_id')
-            ->select('loan_id', \Illuminate\Support\Facades\DB::raw('SUM(CAST(principal_minor AS SIGNED) - CAST(principal_paid_minor AS SIGNED)) as outstanding'))
-            ->pluck('outstanding', 'loan_id');
+        // Raw fragments must carry the table prefix themselves.
+        $li = DB::getTablePrefix().'loan_installments';
 
-        $overdueAgg = \App\Models\LoanInstallment::query()
-            ->whereIn('loan_id', $currencies->keys())
-            ->whereNull('settled_at')
-            ->where('due_date', '<', $today)
-            ->groupBy('loan_id')
+        $totalOutstanding = LoanInstallment::query()
+            ->join('loans', 'loans.id', '=', 'loan_installments.loan_id')
+            ->tap($activeLoans)
+            ->groupBy('loans.currency')
+            ->select('loans.currency', DB::raw("SUM(CAST({$li}.principal_minor AS SIGNED) - CAST({$li}.principal_paid_minor AS SIGNED)) as outstanding"))
+            ->pluck('outstanding', 'currency')
+            ->map(fn ($outstanding) => (int) $outstanding)
+            ->all();
+
+        $overdueAgg = LoanInstallment::query()
+            ->join('loans', 'loans.id', '=', 'loan_installments.loan_id')
+            ->tap($activeLoans)
+            ->whereNull('loan_installments.settled_at')
+            ->where('loan_installments.due_date', '<', $today)
+            ->groupBy('loan_installments.loan_id', 'loans.currency')
             ->select(
-                'loan_id',
-                \Illuminate\Support\Facades\DB::raw('MIN(due_date) as first_overdue'),
-                \Illuminate\Support\Facades\DB::raw('SUM(CAST(principal_minor AS SIGNED) - CAST(principal_paid_minor AS SIGNED) + CAST(interest_minor AS SIGNED) - CAST(interest_paid_minor AS SIGNED) + CAST(penalty_minor AS SIGNED) - CAST(penalty_paid_minor AS SIGNED)) as overdue_minor')
+                'loan_installments.loan_id',
+                'loans.currency',
+                DB::raw("MIN({$li}.due_date) as first_overdue"),
+                DB::raw("SUM(CAST({$li}.principal_minor AS SIGNED) - CAST({$li}.principal_paid_minor AS SIGNED) + CAST({$li}.interest_minor AS SIGNED) - CAST({$li}.interest_paid_minor AS SIGNED) + CAST({$li}.penalty_minor AS SIGNED) - CAST({$li}.penalty_paid_minor AS SIGNED)) as overdue_minor")
             )
             ->get()
             ->keyBy('loan_id');
 
-        $totalOutstanding = [];
+        // Per-loan outstanding is only needed for the loans in arrears.
+        $outstandingPerLoan = LoanInstallment::query()
+            ->whereIn('loan_id', $overdueAgg->keys())
+            ->groupBy('loan_id')
+            ->select('loan_id', DB::raw('SUM(CAST(principal_minor AS SIGNED) - CAST(principal_paid_minor AS SIGNED)) as outstanding'))
+            ->pluck('outstanding', 'loan_id');
+
         $parBuckets = [30 => [], 60 => [], 90 => []];
 
-        foreach ($currencies as $loanId => $currency) {
+        foreach ($overdueAgg as $loanId => $agg) {
             $outstanding = (int) ($outstandingPerLoan[$loanId] ?? 0);
-            $totalOutstanding[$currency] = ($totalOutstanding[$currency] ?? 0) + $outstanding;
+            $days = (int) Carbon::parse($agg->first_overdue)->diffInDays($today);
 
-            if ($agg = $overdueAgg->get($loanId)) {
-                $days = (int) \Illuminate\Support\Carbon::parse($agg->first_overdue)->diffInDays($today);
-
-                foreach ([30, 60, 90] as $bucket) {
-                    if ($days > $bucket) {
-                        $parBuckets[$bucket][$currency] = ($parBuckets[$bucket][$currency] ?? 0) + $outstanding;
-                    }
+            foreach ([30, 60, 90] as $bucket) {
+                if ($days > $bucket) {
+                    $parBuckets[$bucket][$agg->currency] = ($parBuckets[$bucket][$agg->currency] ?? 0) + $outstanding;
                 }
             }
         }
@@ -80,7 +97,7 @@ class Portfolio extends Component
                 'id' => $loan->id,
                 'loan_number' => $loan->loan_number,
                 'borrower' => $loan->borrower?->fullName() ?? '—',
-                'days' => (int) \Illuminate\Support\Carbon::parse($agg->first_overdue)->diffInDays($today),
+                'days' => (int) Carbon::parse($agg->first_overdue)->diffInDays($today),
                 'overdue' => Money::minor((int) $agg->overdue_minor, $loan->currency, (int) $loan->scale)->formatted(),
                 'outstanding' => Money::minor((int) ($outstandingPerLoan[$loanId] ?? 0), $loan->currency, (int) $loan->scale)->formatted(),
                 'currency' => $loan->currency,
@@ -106,10 +123,11 @@ class Portfolio extends Component
                 ->implode(' · ');
         };
 
+        $scales = app(CurrencyScale::class);
         $outstandingLabel = $totalOutstanding === []
             ? '0.00'
             : collect($totalOutstanding)
-                ->map(fn (int $minor, string $currency) => Money::minor($minor, $currency)->formatted().' '.$currency)
+                ->map(fn (int $minor, string $currency) => $scales->money($minor, $currency)->formatted().' '.$currency)
                 ->implode(' · ');
 
         return view('livewire.reports.portfolio', [

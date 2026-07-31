@@ -3,8 +3,12 @@
 namespace App\Livewire\Users;
 
 use App\Models\Branch;
+use App\Models\JournalEntry;
+use App\Models\Loan;
+use App\Models\LoanPayment;
 use App\Models\User;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Livewire\Component;
@@ -14,18 +18,23 @@ class Form extends Component
     public ?User $user = null;
 
     public string $name = '';
+
     public string $email = '';
+
     public string $password = '';
+
     public string $role = 'loan_officer';
+
     public ?int $branch_id = null;
+
     public bool $is_active = true;
 
     public const ROLES = ['admin', 'manager', 'loan_officer', 'cashier', 'accountant'];
 
-    public function mount(?int $user = null): void
+    public function mount(User|int|null $user = null): void
     {
         if ($user !== null) {
-            $this->user = User::findOrFail($user);
+            $this->user = $user instanceof User ? $user : User::findOrFail($user);
 
             $this->name = $this->user->name;
             $this->email = $this->user->email;
@@ -49,7 +58,7 @@ class Form extends Component
 
     public function save(): void
     {
-        \Illuminate\Support\Facades\Gate::authorize('manage-users');
+        Gate::authorize('manage-users');
 
         if (config('lms.demo')) {
             $this->addError('name', __('Account changes are disabled in demo mode.'));
@@ -74,6 +83,15 @@ class Form extends Component
                 return;
             }
 
+            // ...nor deactivate themselves out: EnsureActive logs them out
+            // on the next request and there is no CLI recovery path.
+            if ($this->user->role === 'admin' && $this->user->is_active && ! $data['is_active']
+                && User::where('role', 'admin')->where('is_active', true)->count() === 1) {
+                $this->addError('is_active', __('Cannot deactivate the last active admin.'));
+
+                return;
+            }
+
             $this->user->update($data);
         } else {
             User::create($data);
@@ -85,7 +103,7 @@ class Form extends Component
 
     public function delete(): void
     {
-        \Illuminate\Support\Facades\Gate::authorize('manage-users');
+        Gate::authorize('manage-users');
 
         if (config('lms.demo')) {
             $this->addError('name', __('Account changes are disabled in demo mode.'));
@@ -106,6 +124,27 @@ class Form extends Component
         if ($this->user->role === 'admin'
             && User::where('role', 'admin')->where('is_active', true)->count() === 1) {
             $this->addError('name', __('Cannot delete the last active admin.'));
+
+            return;
+        }
+
+        // Deleting nulls out audit FKs (received_by, approved_by, ...) and
+        // erases who touched the money — such accounts get deactivated,
+        // never deleted.
+        $userId = $this->user->id;
+        $hasFinancialHistory = LoanPayment::query()
+            ->where(fn ($q) => $q->where('received_by', $userId)->orWhere('reversed_by', $userId))
+            ->exists()
+            || Loan::withTrashed()
+                ->where(fn ($q) => $q
+                    ->where('approved_by', $userId)
+                    ->orWhere('disbursed_by', $userId)
+                    ->orWhere('created_by', $userId))
+                ->exists()
+            || JournalEntry::where('created_by', $userId)->exists();
+
+        if ($hasFinancialHistory) {
+            $this->addError('name', __('This user is referenced by financial records and cannot be deleted — deactivate the account instead.'));
 
             return;
         }

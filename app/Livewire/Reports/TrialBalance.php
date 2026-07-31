@@ -4,15 +4,21 @@ namespace App\Livewire\Reports;
 
 use App\Models\JournalLine;
 use App\Models\LedgerAccount;
+use App\Support\CurrencyScale;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\DB;
 use Livewire\Component;
-use LoanEngine\Money;
 
 class TrialBalance extends Component
 {
     public function render(): View
     {
+        // Journal lines carry no branch dimension, so the trial balance is
+        // always org-wide — branch-scoped staff must not see it at all.
+        abort_if(auth()->user()?->scopedBranchId() !== null, 403, __('The trial balance covers all branches and is not available to branch-scoped accounts.'));
+
+        $scales = app(CurrencyScale::class);
+
         // Grouped by account AND currency — cents of different currencies
         // must never be added together.
         $sums = JournalLine::query()
@@ -41,9 +47,9 @@ class TrialBalance extends Component
                     'code' => $account->code,
                     'name' => $account->name.($lines->count() > 1 ? ' ('.$line->currency.')' : ''),
                     'type' => $account->type,
-                    'debits' => Money::minor($debits, $line->currency)->formatted(),
-                    'credits' => Money::minor($credits, $line->currency)->formatted(),
-                    'balance' => Money::minor(abs($net), $line->currency)->formatted().($net < 0 ? ' Cr' : ($net > 0 ? ' Dr' : '')),
+                    'debits' => $scales->money($debits, $line->currency)->formatted(),
+                    'credits' => $scales->money($credits, $line->currency)->formatted(),
+                    'balance' => $scales->money(abs($net), $line->currency)->formatted().($net < 0 ? ' Cr' : ($net > 0 ? ' Dr' : '')),
                 ];
             }
         }
@@ -57,7 +63,7 @@ class TrialBalance extends Component
         $balanced = $currencyTotals->every(fn ($t) => (int) $t->debits === (int) $t->credits);
 
         $format = fn (string $column) => $currencyTotals
-            ->map(fn ($t) => Money::minor((int) $t->{$column}, $t->currency)->formatted().' '.$t->currency)
+            ->map(fn ($t) => $scales->money((int) $t->{$column}, $t->currency)->formatted().' '.$t->currency)
             ->implode(' · ');
 
         return view('livewire.reports.trial-balance', [

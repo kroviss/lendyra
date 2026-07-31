@@ -86,6 +86,9 @@ class OperationsTest extends TestCase
         ]);
 
         $this->actingAs($officer)->get('/products')->assertForbidden();
+        // AuthenticateSession binds the session to a user's password hash —
+        // switching users mid-test needs a fresh session, like a real browser.
+        $this->flushSession();
         $this->actingAs($admin)->get('/products')->assertOk();
     }
 

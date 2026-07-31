@@ -38,6 +38,12 @@
                     class="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40" />
             </div>
 
+            <label for="remember" class="flex items-center gap-2 text-sm text-gray-700">
+                <input id="remember" type="checkbox" name="remember" value="1" @checked(old('remember'))
+                    class="size-4 rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-2 focus:ring-indigo-500/40" />
+                {{ __('Remember me') }}
+            </label>
+
             @if ($errors->any())
                 <p class="text-sm text-red-600">{{ $errors->first() }}</p>
             @endif

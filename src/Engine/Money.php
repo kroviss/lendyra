@@ -17,8 +17,7 @@ final class Money
         public readonly int $minor,
         public readonly string $currency,
         public readonly int $scale,
-    ) {
-    }
+    ) {}
 
     public static function minor(int $minor, string $currency = 'USD', int $scale = 2): self
     {
@@ -34,8 +33,14 @@ final class Money
             }
             $negative = str_starts_with($major, '-');
             [$whole, $fraction] = array_pad(explode('.', ltrim($major, '-'), 2), 2, '');
-            $fraction = str_pad(substr($fraction, 0, $scale), $scale, '0');
-            $minor = ((int) $whole) * (10 ** $scale) + (int) $fraction;
+            $minor = ((int) $whole) * (10 ** $scale) + (int) str_pad(substr($fraction, 0, $scale), $scale, '0');
+
+            // Round half-up on the first beyond-scale digit — the same
+            // rule as the float path below, but in pure integer math so
+            // large amounts never take a lossy float detour.
+            if (strlen($fraction) > $scale && $fraction[$scale] >= '5') {
+                $minor++;
+            }
 
             return new self($negative ? -$minor : $minor, $currency, $scale);
         }

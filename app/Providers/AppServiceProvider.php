@@ -2,35 +2,57 @@
 
 namespace App\Providers;
 
+use App\Http\Middleware\EnsureRole;
 use App\Models\User;
+use App\Support\CurrencyScale;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Middleware\TrustProxies;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
+use Livewire\Livewire;
 
 class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        //
+        // One products→scale lookup per request, shared by every report
+        // that renders per-currency aggregates.
+        $this->app->singleton(CurrencyScale::class);
     }
 
     public function boot(): void
     {
         // Keeps unique indexes under the 767-byte limit on MySQL 5.7 /
         // MariaDB 10.1 shared hosting.
-        \Illuminate\Support\Facades\Schema::defaultStringLength(191);
+        Schema::defaultStringLength(191);
+
+        // Honour X-Forwarded-* only from proxies the operator explicitly
+        // trusts (TRUSTED_PROXIES env: comma-separated IPs, or "*").
+        // Default is trust none — otherwise any client could spoof its IP
+        // and turn every per-IP rate limiter (login lockout) into a no-op.
+        $trustedProxies = (string) config('app.trusted_proxies', '');
+
+        if ($trustedProxies !== '') {
+            TrustProxies::at($trustedProxies === '*'
+                ? '*'
+                : array_values(array_filter(array_map('trim', explode(',', $trustedProxies)))));
+        }
 
         // Role middleware must re-run on Livewire update requests, not just
         // the initial page load — otherwise a demoted user's open page
         // keeps executing privileged actions.
-        \Livewire\Livewire::addPersistentMiddleware([
-            \App\Http\Middleware\EnsureRole::class,
+        Livewire::addPersistentMiddleware([
+            EnsureRole::class,
         ]);
 
         // Throttle login per IP AND per email+IP.
-        \Illuminate\Support\Facades\RateLimiter::for('login', function (\Illuminate\Http\Request $request) {
+        RateLimiter::for('login', function (Request $request) {
             return [
-                \Illuminate\Cache\RateLimiting\Limit::perMinute(5)->by('ip:'.$request->ip()),
-                \Illuminate\Cache\RateLimiting\Limit::perMinute(5)->by('email:'.strtolower((string) $request->input('email')).'|'.$request->ip()),
+                Limit::perMinute(5)->by('ip:'.$request->ip()),
+                Limit::perMinute(5)->by('email:'.strtolower((string) $request->input('email')).'|'.$request->ip()),
             ];
         });
 

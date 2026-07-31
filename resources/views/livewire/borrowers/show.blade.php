@@ -2,7 +2,7 @@
     <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div class="flex items-center gap-4">
             @if ($borrower->photo_path)
-                <img src="{{ asset('storage/'.$borrower->photo_path) }}" class="size-14 rounded-full object-cover ring-1 ring-gray-200" alt="" />
+                <img src="{{ url('media/'.$borrower->photo_path) }}" class="size-14 rounded-full object-cover ring-1 ring-gray-200" alt="" />
             @else
                 <div class="flex size-14 items-center justify-center rounded-full bg-indigo-100 text-lg font-semibold text-indigo-600">
                     {{ mb_substr($borrower->first_name, 0, 1) }}{{ mb_substr($borrower->last_name ?? '', 0, 1) }}

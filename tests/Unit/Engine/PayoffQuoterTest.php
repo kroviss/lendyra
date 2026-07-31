@@ -136,6 +136,43 @@ class PayoffQuoterTest extends TestCase
         $this->assertSame('10.00', $quote->accruedInterest->toDecimalString());
     }
 
+    public function test_prorated_quote_nets_out_prepaid_current_period_interest(): void
+    {
+        // #1 settled; #2's interest (91.67) prepaid 40.00 through an
+        // overpayment waterfall → interestDue 51.67.
+        $dues = $this->duesAfterFirstPayment();
+        $second = $dues[1];
+        $dues[1] = new InstallmentDue(
+            2, $second->dueDate, $second->principalDue,
+            $second->interestDue->sub(Money::of('40.00')), $second->penaltyDue
+        );
+
+        // Gross prorated accrual as of Mar 5 is 58.93 (see base case);
+        // 40.00 of it is already paid → only 18.93 may be charged.
+        $quote = PayoffQuoter::quote(
+            $this->terms, $this->schedule, $dues, new DateTimeImmutable('2026-03-05')
+        );
+
+        $this->assertSame('18.93', $quote->accruedInterest->toDecimalString());
+    }
+
+    public function test_prorated_quote_never_negative_when_prepaid_exceeds_accrual(): void
+    {
+        // #2's interest fully prepaid: interestDue 0 → nothing more may
+        // accrue, and both modes agree the current period charges zero.
+        $dues = $this->duesAfterFirstPayment();
+        $second = $dues[1];
+        $dues[1] = new InstallmentDue(2, $second->dueDate, $second->principalDue, Money::zero(), $second->penaltyDue);
+
+        foreach ([EarlyPayoffInterestMode::Prorated, EarlyPayoffInterestMode::FullPeriod] as $mode) {
+            $quote = PayoffQuoter::quote(
+                $this->terms, $this->schedule, $dues, new DateTimeImmutable('2026-03-05'), $mode
+            );
+
+            $this->assertSame('0.00', $quote->accruedInterest->toDecimalString(), $mode->value);
+        }
+    }
+
     public function test_fully_paid_loan_quotes_zero(): void
     {
         $dues = array_map(

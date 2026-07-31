@@ -4,53 +4,77 @@ namespace App\Livewire\Loans;
 
 use App\Enums\LoanStatus;
 use App\Models\Loan;
+use App\Services\LedgerService;
 use App\Services\LoanScheduleService;
 use App\Services\PayoffService;
 use App\Services\PenaltyService;
 use App\Services\RepaymentService;
 use DateTimeImmutable;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\View\View;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
+use Livewire\WithFileUploads;
 use LoanEngine\Money;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Throwable;
 
 class Show extends Component
 {
-    use \Livewire\WithFileUploads;
+    use WithFileUploads;
 
     #[Locked]
     public int $loanId;
 
     // Payment modal state
     public bool $showPaymentModal = false;
+
     public ?float $paymentAmount = null;
+
     public string $paymentDate = '';
+
     public string $paymentMethod = 'cash';
+
     public string $paymentReference = '';
 
     // Payoff modal state
     public bool $showPayoffModal = false;
+
     public string $payoffDate = '';
+
     public string $payoffMethod = 'cash';
 
     // Collateral modal state
     public bool $showCollateralModal = false;
+
     public string $collateralType = '';
+
     public string $collateralDescription = '';
+
     public ?float $collateralValue = null;
 
-    /** @var \Livewire\Features\SupportFileUploads\TemporaryUploadedFile[] */
+    /** @var TemporaryUploadedFile[] */
     public array $collateralPhotos = [];
 
     public ?int $editingCollateralId = null;
+
     public ?int $editingGuarantorId = null;
 
     // Guarantor modal state
     public bool $showGuarantorModal = false;
+
     public string $guarantorName = '';
+
     public string $guarantorPhone = '';
+
     public string $guarantorIdNumber = '';
+
     public string $guarantorRelationship = '';
 
     public ?string $actionError = null;
@@ -94,21 +118,35 @@ class Show extends Component
     /** Never surface framework internals (SQL, model class names) to staff. */
     private function friendlyError(Throwable $e): string
     {
-        if ($e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException) {
+        if ($e instanceof ModelNotFoundException) {
             return __('That record no longer exists — refresh the page.');
         }
 
-        if ($e instanceof \Symfony\Component\HttpKernel\Exception\HttpException) {
+        if ($e instanceof HttpException) {
             return $e->getMessage() ?: __('You do not have permission to do that.');
         }
 
-        if ($e instanceof \Illuminate\Database\QueryException) {
+        if ($e instanceof QueryException) {
             report($e);
 
             return __('The database rejected that change. Please try again.');
         }
 
-        return $e->getMessage();
+        if ($e instanceof AuthorizationException) {
+            return $e->getMessage() ?: __('You do not have permission to do that.');
+        }
+
+        // Domain guards raise LogicException/InvalidArgumentException with
+        // messages written for staff — safe to surface as-is.
+        if ($e instanceof \LogicException || $e instanceof \InvalidArgumentException) {
+            return $e->getMessage();
+        }
+
+        // Anything else may carry class names or absolute paths — log it
+        // for the operator, show staff a generic message.
+        report($e);
+
+        return __('Something went wrong. Please try again.');
     }
 
     public function activate(): void
@@ -117,9 +155,9 @@ class Show extends Component
         $loan = $this->loan();
 
         try {
-            \Illuminate\Support\Facades\Gate::authorize('activate-loans');
+            Gate::authorize('activate-loans');
 
-            \Illuminate\Support\Facades\DB::transaction(function () {
+            DB::transaction(function () {
                 // Lock + re-check inside the transaction: double-clicks and
                 // concurrent tabs must not disburse twice.
                 $loan = Loan::lockForUpdate()->findOrFail($this->loanId);
@@ -135,11 +173,11 @@ class Show extends Component
 
                 app(LoanScheduleService::class)->generateAndPersist($loan);
                 $loan->update(['status' => LoanStatus::Active, 'disbursed_by' => auth()->id()]);
-                app(\App\Services\LedgerService::class)->postDisbursement($loan);
+                app(LedgerService::class)->postDisbursement($loan);
             });
 
             $this->dispatch('toast', message: __('Loan disbursed and activated'));
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
             $this->actionError = $this->friendlyError($e);
@@ -151,21 +189,26 @@ class Show extends Component
         $this->actionError = null;
 
         try {
-            \Illuminate\Support\Facades\Gate::authorize('activate-loans');
+            Gate::authorize('activate-loans');
 
-            $loan = $this->loan();
+            DB::transaction(function () {
+                // Lock + re-check: racing activate()/reject() must not
+                // re-stamp a loan that already left the pending queue.
+                $loan = Loan::lockForUpdate()->findOrFail($this->loanId);
 
-            if ($loan->status !== LoanStatus::PendingApproval) {
-                throw new \LogicException(__('Only pending loans can be approved.'));
-            }
+                if ($loan->status !== LoanStatus::PendingApproval) {
+                    throw new \LogicException(__('Only pending loans can be approved.'));
+                }
 
-            $loan->update([
-                'status' => LoanStatus::Approved,
-                'approved_by' => auth()->id(),
-                'approved_at' => now(),
-            ]);
+                $loan->update([
+                    'status' => LoanStatus::Approved,
+                    'approved_by' => auth()->id(),
+                    'approved_at' => now(),
+                ]);
+            });
+
             $this->dispatch('toast', message: __('Loan approved'));
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
             $this->actionError = $this->friendlyError($e);
@@ -177,27 +220,31 @@ class Show extends Component
         $this->actionError = null;
 
         try {
-            $loan = $this->loan();
+            DB::transaction(function () {
+                // Lock + re-check: a concurrent activation must not let a
+                // freshly disbursed loan slip through the status guard.
+                $loan = Loan::lockForUpdate()->findOrFail($this->loanId);
 
-            // The maker may withdraw their own application while it is
-            // still pending; anything else needs approval rights.
-            $isOwnPending = in_array($loan->status, [LoanStatus::PendingApproval, LoanStatus::Rejected], true)
-                && (int) $loan->created_by === (int) auth()->id()
-                && \Illuminate\Support\Facades\Gate::allows('create-loans');
+                // The maker may withdraw their own application while it is
+                // still pending; anything else needs approval rights.
+                $isOwnPending = in_array($loan->status, [LoanStatus::PendingApproval, LoanStatus::Rejected], true)
+                    && (int) $loan->created_by === (int) auth()->id()
+                    && Gate::allows('create-loans');
 
-            if (! $isOwnPending) {
-                \Illuminate\Support\Facades\Gate::authorize('activate-loans');
-            }
+                if (! $isOwnPending) {
+                    Gate::authorize('activate-loans');
+                }
 
-            if (! in_array($loan->status, [LoanStatus::Draft, LoanStatus::PendingApproval, LoanStatus::Approved, LoanStatus::Rejected], true)) {
-                throw new \LogicException(__('Only loans that were never disbursed can be deleted.'));
-            }
+                if (! in_array($loan->status, [LoanStatus::Draft, LoanStatus::PendingApproval, LoanStatus::Approved, LoanStatus::Rejected], true)) {
+                    throw new \LogicException(__('Only loans that were never disbursed can be deleted.'));
+                }
 
-            $loan->delete();
+                $loan->delete();
+            });
 
             session()->flash('status', __('Loan deleted'));
             $this->redirectRoute('loans.index');
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
             $this->actionError = $this->friendlyError($e);
@@ -209,29 +256,15 @@ class Show extends Component
         $this->actionError = null;
 
         try {
-            \Illuminate\Support\Facades\Gate::authorize('write-off-loans');
+            Gate::authorize('write-off-loans');
 
-            $installment = $this->loan()->installments()->findOrFail($installmentId);
-            $waived = $installment->penaltyDue();
-
-            if ($waived->minor <= 0) {
-                throw new \LogicException(__('Nothing to waive on this installment.'));
-            }
-
-            $installment->update(['penalty_minor' => (int) $installment->penalty_paid_minor]);
-
-            if ($installment->fresh()->isSettled() && $installment->settled_at === null) {
-                $installment->update(['settled_at' => today()]);
-            }
-
-            $loan = $this->loan();
-            if ($loan->status === LoanStatus::Active
-                && $loan->installments->every(fn ($i) => $i->isSettled())) {
-                $loan->update(['status' => LoanStatus::Closed, 'closed_at' => today()]);
-            }
+            // The service locks the loan + installments, waives on fresh
+            // rows and closes the loan when nothing else is owed.
+            $waived = app(PenaltyService::class)->waive($this->loan(), $installmentId);
+            $this->forgetLoan();
 
             $this->dispatch('toast', message: __('Penalty of :amount waived', ['amount' => $waived->formatted()]));
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
             $this->actionError = $this->friendlyError($e);
@@ -259,21 +292,26 @@ class Show extends Component
         $this->actionError = null;
 
         try {
-            \Illuminate\Support\Facades\Gate::authorize('activate-loans');
+            Gate::authorize('activate-loans');
 
-            $loan = $this->loan();
+            DB::transaction(function () {
+                // Lock + re-check: rejecting must not race a concurrent
+                // activation and orphan a disbursed, active loan.
+                $loan = Loan::lockForUpdate()->findOrFail($this->loanId);
 
-            if (! in_array($loan->status, [LoanStatus::Approved, LoanStatus::PendingApproval], true)) {
-                throw new \LogicException(__('Only pending or approved loans can be rejected.'));
-            }
+                if (! in_array($loan->status, [LoanStatus::Approved, LoanStatus::PendingApproval], true)) {
+                    throw new \LogicException(__('Only pending or approved loans can be rejected.'));
+                }
 
-            $loan->update([
-                'status' => LoanStatus::Rejected,
-                'approved_by' => null,
-                'approved_at' => null,
-            ]);
+                $loan->update([
+                    'status' => LoanStatus::Rejected,
+                    'approved_by' => null,
+                    'approved_at' => null,
+                ]);
+            });
+
             $this->dispatch('toast', message: __('Loan rejected'));
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
             $this->actionError = $this->friendlyError($e);
@@ -285,9 +323,9 @@ class Show extends Component
         $this->actionError = null;
 
         try {
-            \Illuminate\Support\Facades\Gate::authorize('write-off-loans');
+            Gate::authorize('write-off-loans');
 
-            \Illuminate\Support\Facades\DB::transaction(function () {
+            DB::transaction(function () {
                 $loan = Loan::lockForUpdate()->findOrFail($this->loanId);
 
                 if ($loan->status !== LoanStatus::Active) {
@@ -304,12 +342,12 @@ class Show extends Component
                 ]);
 
                 if ($remaining->minor > 0) {
-                    app(\App\Services\LedgerService::class)->postWriteOff($loan, $remaining);
+                    app(LedgerService::class)->postWriteOff($loan, $remaining);
                 }
             });
 
             $this->dispatch('toast', message: __('Loan written off'));
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
             $this->actionError = $this->friendlyError($e);
@@ -321,12 +359,12 @@ class Show extends Component
         $this->actionError = null;
 
         try {
-            \Illuminate\Support\Facades\Gate::authorize('reverse-payments');
+            Gate::authorize('reverse-payments');
 
             $payment = $this->loan()->payments()->findOrFail($paymentId);
             app(RepaymentService::class)->reverse($payment, auth()->id());
             $this->dispatch('toast', message: __('Payment reversed'));
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
             $this->actionError = $this->friendlyError($e);
@@ -338,7 +376,7 @@ class Show extends Component
         $this->actionError = null;
 
         try {
-            \Illuminate\Support\Facades\Gate::authorize('record-payments');
+            Gate::authorize('record-payments');
 
             $before = $this->loan()->installments->sum('penalty_minor');
             app(PenaltyService::class)->accrue($this->loan(), new DateTimeImmutable(today()->format('Y-m-d')));
@@ -347,7 +385,7 @@ class Show extends Component
             $this->dispatch('toast', message: $delta > 0
                 ? __('Penalties updated (+:amount)', ['amount' => Money::minor((int) $delta, $this->loan()->currency, (int) $this->loan()->scale)->formatted()])
                 : __('Penalties are up to date'));
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
             $this->actionError = $this->friendlyError($e);
@@ -368,7 +406,7 @@ class Show extends Component
         $loan = $this->loan();
 
         try {
-            \Illuminate\Support\Facades\Gate::authorize('record-payments');
+            Gate::authorize('record-payments');
 
             app(RepaymentService::class)->record(
                 $loan,
@@ -381,7 +419,7 @@ class Show extends Component
 
             $this->reset('showPaymentModal', 'paymentAmount', 'paymentReference');
             $this->dispatch('toast', message: __('Payment recorded'));
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
             $this->actionError = $this->friendlyError($e);
@@ -416,7 +454,7 @@ class Show extends Component
         ]);
 
         try {
-            \Illuminate\Support\Facades\Gate::authorize('payoff-loans');
+            Gate::authorize('payoff-loans');
 
             app(PayoffService::class)->settle(
                 $this->loan(),
@@ -427,7 +465,7 @@ class Show extends Component
 
             $this->showPayoffModal = false;
             $this->dispatch('toast', message: __('Loan settled in full'));
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
             $this->actionError = $this->friendlyError($e);
@@ -449,7 +487,7 @@ class Show extends Component
         $this->actionError = null;
 
         try {
-            \Illuminate\Support\Facades\Gate::authorize('create-loans');
+            Gate::authorize('create-loans');
             $this->assertLoanMutable();
 
             $this->validate([
@@ -461,8 +499,10 @@ class Show extends Component
 
             $loan = $this->loan();
 
+            // Private disk: photos are served through the authenticated
+            // /media route, never as world-readable /storage URLs.
             $photos = collect($this->collateralPhotos)
-                ->map(fn ($photo) => $photo->store('collaterals', 'public'))
+                ->map(fn ($photo) => $photo->store('collaterals', 'local'))
                 ->all();
 
             if ($this->editingCollateralId) {
@@ -486,7 +526,7 @@ class Show extends Component
 
             $this->reset('showCollateralModal', 'collateralType', 'collateralDescription', 'collateralValue', 'collateralPhotos', 'editingCollateralId');
             $this->dispatch('toast', message: $message);
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
             $this->actionError = $this->friendlyError($e);
@@ -500,14 +540,14 @@ class Show extends Component
         try {
             // Releasing security on a live loan is a management decision —
             // and on a closed loan it is the whole point, so no status gate.
-            \Illuminate\Support\Facades\Gate::authorize('write-off-loans');
+            Gate::authorize('write-off-loans');
 
             $this->loan()->collaterals()
                 ->whereKey($collateralId)
                 ->update(['status' => 'released', 'released_at' => today()]);
 
             $this->dispatch('toast', message: __('Collateral released'));
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
             $this->actionError = $this->friendlyError($e);
@@ -519,7 +559,7 @@ class Show extends Component
         $this->actionError = null;
 
         try {
-            \Illuminate\Support\Facades\Gate::authorize('create-loans');
+            Gate::authorize('create-loans');
             $this->assertLoanMutable();
 
             $collateral = $this->loan()->collaterals()->findOrFail($collateralId);
@@ -527,9 +567,9 @@ class Show extends Component
             $this->editingCollateralId = $collateral->id;
             $this->collateralType = $collateral->type;
             $this->collateralDescription = (string) ($collateral->description ?? '');
-            $this->collateralValue = (float) \LoanEngine\Money::minor((int) $collateral->estimated_value_minor, $this->loan()->currency, (int) $this->loan()->scale)->toDecimalString();
+            $this->collateralValue = (float) Money::minor((int) $collateral->estimated_value_minor, $this->loan()->currency, (int) $this->loan()->scale)->toDecimalString();
             $this->showCollateralModal = true;
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
             $this->actionError = $this->friendlyError($e);
@@ -541,13 +581,13 @@ class Show extends Component
         $this->actionError = null;
 
         try {
-            \Illuminate\Support\Facades\Gate::authorize('write-off-loans');
+            Gate::authorize('write-off-loans');
             $this->assertLoanMutable();
 
             $this->loan()->collaterals()->whereKey($collateralId)->delete();
 
             $this->dispatch('toast', message: __('Collateral deleted'));
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
             $this->actionError = $this->friendlyError($e);
@@ -559,7 +599,7 @@ class Show extends Component
         $this->actionError = null;
 
         try {
-            \Illuminate\Support\Facades\Gate::authorize('create-loans');
+            Gate::authorize('create-loans');
             $this->assertLoanMutable();
 
             $guarantor = $this->loan()->guarantors()->findOrFail($guarantorId);
@@ -570,7 +610,7 @@ class Show extends Component
             $this->guarantorIdNumber = (string) ($guarantor->id_number ?? '');
             $this->guarantorRelationship = (string) ($guarantor->relationship ?? '');
             $this->showGuarantorModal = true;
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
             $this->actionError = $this->friendlyError($e);
@@ -582,7 +622,7 @@ class Show extends Component
         $this->actionError = null;
 
         try {
-            \Illuminate\Support\Facades\Gate::authorize('create-loans');
+            Gate::authorize('create-loans');
             $this->assertLoanMutable();
 
             $this->validate([
@@ -612,7 +652,7 @@ class Show extends Component
 
             $this->reset('showGuarantorModal', 'guarantorName', 'guarantorPhone', 'guarantorIdNumber', 'guarantorRelationship', 'editingGuarantorId');
             $this->dispatch('toast', message: $message);
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
             $this->actionError = $this->friendlyError($e);
@@ -624,13 +664,13 @@ class Show extends Component
         $this->actionError = null;
 
         try {
-            \Illuminate\Support\Facades\Gate::authorize('create-loans');
+            Gate::authorize('create-loans');
             $this->assertLoanMutable();
 
             $this->loan()->guarantors()->whereKey($guarantorId)->delete();
 
             $this->dispatch('toast', message: __('Guarantor removed'));
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
             $this->actionError = $this->friendlyError($e);

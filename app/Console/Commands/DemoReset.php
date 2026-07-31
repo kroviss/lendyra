@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use Database\Seeders\DemoSeeder;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -38,18 +39,27 @@ class DemoReset extends Command
             return self::FAILURE;
         }
 
-        Schema::disableForeignKeyConstraints();
+        // Requests served mid-truncate would re-link orphaned rows to new
+        // seed IDs — hide the app behind maintenance mode until the
+        // dataset is whole again.
+        Artisan::call('down', ['--retry' => 15]);
 
         try {
-            foreach (self::TABLES as $table) {
-                DB::table($table)->truncate();
-            }
-        } finally {
-            Schema::enableForeignKeyConstraints();
-        }
+            Schema::disableForeignKeyConstraints();
 
-        Artisan::call('db:seed', ['--force' => true]);
-        Artisan::call('db:seed', ['--class' => \Database\Seeders\DemoSeeder::class, '--force' => true]);
+            try {
+                foreach (self::TABLES as $table) {
+                    DB::table($table)->truncate();
+                }
+            } finally {
+                Schema::enableForeignKeyConstraints();
+            }
+
+            Artisan::call('db:seed', ['--force' => true]);
+            Artisan::call('db:seed', ['--class' => DemoSeeder::class, '--force' => true]);
+        } finally {
+            Artisan::call('up');
+        }
 
         $this->info('Demo data reset complete.');
 

@@ -4,10 +4,11 @@ namespace App\Livewire\Borrowers;
 
 use App\Enums\LoanStatus;
 use App\Models\Borrower;
+use App\Support\CurrencyScale;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Facades\Gate;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
-use LoanEngine\Money;
 
 class Show extends Component
 {
@@ -27,7 +28,7 @@ class Show extends Component
             return;
         }
 
-        \Illuminate\Support\Facades\Gate::authorize('create-loans');
+        Gate::authorize('create-loans');
 
         $borrower = Borrower::findOrFail($this->borrowerId);
 
@@ -56,10 +57,11 @@ class Show extends Component
             $outstanding[$loan->currency] = ($outstanding[$loan->currency] ?? 0) + $loan->principalOutstanding()->minor;
         }
 
+        $scales = app(CurrencyScale::class);
         $outstandingLabel = $outstanding === []
             ? '0.00'
             : collect($outstanding)
-                ->map(fn (int $minor, string $currency) => Money::minor($minor, $currency)->formatted().' '.$currency)
+                ->map(fn (int $minor, string $currency) => $scales->money($minor, $currency)->formatted().' '.$currency)
                 ->implode(' · ');
 
         return view('livewire.borrowers.show', [

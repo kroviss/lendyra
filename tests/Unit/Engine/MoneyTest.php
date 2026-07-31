@@ -14,9 +14,25 @@ class MoneyTest extends TestCase
     {
         $this->assertSame(1000050, Money::of('10000.50')->minor);
         $this->assertSame(1000000, Money::of('10000')->minor);
-        $this->assertSame(999, Money::of('9.999')->minor); // truncated to scale, not rounded up
+        $this->assertSame(1000, Money::of('9.999')->minor); // rounded half-up to scale, like the float path
         $this->assertSame(-50025, Money::of('-500.25')->minor);
         $this->assertSame(5, Money::of('0.05')->minor);
+    }
+
+    public function test_string_parsing_rounds_half_up_beyond_scale(): void
+    {
+        $this->assertSame(1100, Money::of('10.999')->minor);
+        $this->assertSame(1099, Money::of('10.994')->minor);
+        $this->assertSame(1100, Money::of('10.995')->minor);   // exactly half → up
+        $this->assertSame(-1100, Money::of('-10.995')->minor); // half away from zero
+        $this->assertSame(2, Money::of('1.5', 'MNT', 0)->minor);
+
+        // String and float paths agree on the same value.
+        $this->assertSame(Money::of(10.999)->minor, Money::of('10.999')->minor);
+
+        // Big amounts stay exact — no lossy float detour.
+        $this->assertSame(1000000000000001, Money::of('10000000000000.005')->minor);
+        $this->assertSame(1000000000000000, Money::of('10000000000000.004')->minor);
     }
 
     public function test_invalid_string_throws(): void

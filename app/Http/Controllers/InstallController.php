@@ -15,11 +15,18 @@ class InstallController extends Controller
 {
     public function requirements()
     {
-        return view('install.requirements', ['checks' => $this->checks()]);
+        return view('install.requirements', [
+            'checks' => $this->checks(),
+            'warnings' => $this->warnings(),
+        ]);
     }
 
     public function database()
     {
+        if ($redirect = $this->guardAgainstReinstall()) {
+            return $redirect;
+        }
+
         if (in_array(false, $this->checks(), true)) {
             return redirect()->route('install.requirements');
         }
@@ -29,6 +36,10 @@ class InstallController extends Controller
 
     public function saveDatabase(Request $request)
     {
+        if ($redirect = $this->guardAgainstReinstall()) {
+            return $redirect;
+        }
+
         $data = $request->validate([
             'host' => 'required',
             'port' => 'required|integer',
@@ -66,7 +77,7 @@ class InstallController extends Controller
             'SESSION_DRIVER' => 'file',
             'CACHE_STORE' => 'file',
             'QUEUE_CONNECTION' => 'sync',
-        ]);
+        ] + ($request->isSecure() ? ['SESSION_SECURE_COOKIE' => 'true'] : []));
 
         // Migrate over the submitted credentials NOW — the freshly written
         // .env only takes effect on the next request.
@@ -85,9 +96,20 @@ class InstallController extends Controller
                 Artisan::call('key:generate', ['--force' => true]);
             }
             Artisan::call('migrate', ['--force' => true]);
-            Artisan::call('storage:link', ['--force' => true]);
         } catch (Throwable $e) {
             return back()->withInput()->withErrors(['database' => __('Migration failed: ').$e->getMessage()]);
+        }
+
+        // storage:link fails on hosts where symlink() is disabled. That must
+        // NOT abort the install — carry a warning to the admin step instead.
+        try {
+            Artisan::call('storage:link', ['--force' => true]);
+            session()->forget('install.storage_link_warning');
+        } catch (Throwable $e) {
+            session()->put('install.storage_link_warning', __(
+                'The public storage link could not be created (:reason). Uploaded photos will not display until it exists — run "php artisan storage:link", or create a symlink from public/storage to storage/app/public in your hosting control panel.',
+                ['reason' => $e->getMessage()]
+            ));
         }
 
         return redirect()->route('install.admin');
@@ -143,22 +165,72 @@ class InstallController extends Controller
 
         file_put_contents(storage_path('app/installed.lock'), now()->toIso8601String());
 
-        return redirect('/login')->with('status', __('Installation complete — log in with your admin account.'));
+        $status = __('Installation complete — log in with your admin account.');
+
+        if ($warning = session()->pull('install.storage_link_warning')) {
+            $status .= ' '.$warning;
+        }
+
+        return redirect('/login')->with('status', $status);
+    }
+
+    /**
+     * The database step must never act as a reinstaller: when installed.lock
+     * was lost but the currently configured database already has users, an
+     * anonymous visitor could otherwise rewrite .env to point at their own
+     * database and mint a fresh admin. Heal the lock and bail out, exactly
+     * like the admin step does. An unreachable/unconfigured database means a
+     * genuine fresh install — proceed.
+     */
+    private function guardAgainstReinstall()
+    {
+        try {
+            if (User::query()->exists()) {
+                file_put_contents(storage_path('app/installed.lock'), now()->toIso8601String());
+
+                return redirect('/login');
+            }
+        } catch (Throwable) {
+            // No reachable database yet — fresh install, carry on.
+        }
+
+        return null;
     }
 
     private function checks(): array
     {
         return [
-            'PHP >= 8.2 ('.PHP_VERSION.')' => PHP_VERSION_ID >= 80200,
-            'pdo_mysql extension' => extension_loaded('pdo_mysql'),
-            'mbstring extension' => extension_loaded('mbstring'),
-            'openssl extension' => extension_loaded('openssl'),
-            'ctype extension' => extension_loaded('ctype'),
-            'curl extension' => extension_loaded('curl'),
-            'storage/ writable' => is_writable(storage_path()),
-            'bootstrap/cache writable' => is_writable(base_path('bootstrap/cache')),
-            '.env writable' => is_writable(base_path('.env')) || is_writable(base_path()),
+            __('PHP >= :required (:current)', ['required' => '8.3', 'current' => PHP_VERSION]) => PHP_VERSION_ID >= 80300,
+            __(':name extension', ['name' => 'pdo_mysql']) => extension_loaded('pdo_mysql'),
+            __(':name extension', ['name' => 'mbstring']) => extension_loaded('mbstring'),
+            __(':name extension', ['name' => 'openssl']) => extension_loaded('openssl'),
+            __(':name extension', ['name' => 'ctype']) => extension_loaded('ctype'),
+            __(':name extension', ['name' => 'curl']) => extension_loaded('curl'),
+            __(':name extension', ['name' => 'fileinfo']) => extension_loaded('fileinfo'),
+            __(':name extension', ['name' => 'dom']) => extension_loaded('dom'),
+            __(':name extension', ['name' => 'xml']) => extension_loaded('xml'),
+            __(':name extension', ['name' => 'tokenizer']) => extension_loaded('tokenizer'),
+            __(':name extension', ['name' => 'filter']) => extension_loaded('filter'),
+            __(':name extension', ['name' => 'session']) => extension_loaded('session'),
+            __(':path writable', ['path' => 'storage/']) => is_writable(storage_path()),
+            __(':path writable', ['path' => 'bootstrap/cache']) => is_writable(base_path('bootstrap/cache')),
+            __(':path writable', ['path' => '.env']) => is_writable(base_path('.env')) || is_writable(base_path()),
         ];
+    }
+
+    /**
+     * Non-blocking notices: the install may proceed, but the buyer should
+     * know about these.
+     */
+    private function warnings(): array
+    {
+        $warnings = [];
+
+        if (! function_exists('symlink')) {
+            $warnings[] = __('The symlink() function is disabled on this host. Installation will work, but uploaded photos need a manual link from public/storage to storage/app/public.');
+        }
+
+        return $warnings;
     }
 
     private function writeEnv(array $values): void

@@ -19,15 +19,50 @@
 ```bash
 cp .env.example .env
 # edit .env: APP_URL, DB_HOST, DB_DATABASE, DB_USERNAME, DB_PASSWORD, optional DB_PREFIX
+# (.env.example already ships APP_ENV=production and APP_DEBUG=false — keep
+#  them that way on a live server; set SESSION_SECURE_COOKIE=true when
+#  serving over HTTPS)
 php artisan key:generate
 php artisan migrate --force
+php artisan storage:link           # makes uploaded photos publicly visible (public/storage → storage/app/public)
 php artisan db:seed --force        # optional starter data; creates admin@example.com/password ONLY on an empty database — change it immediately
 touch storage/app/installed.lock   # marks the app as installed
 ```
 
+If `php artisan storage:link` fails because `symlink()` is disabled on your
+host, create the link from your hosting control panel (a symlink named
+`public/storage` pointing at `storage/app/public`). Everything else works
+without it — only uploaded photos need the link to display.
+
+## Fixed `public_html` document root (cPanel / shared hosting)
+
+If you cannot point the document root at `public/` (common on cPanel),
+use either of these:
+
+**Option 1 (preferred):** upload the app OUTSIDE `public_html`
+(e.g. `~/lendyra`), then replace `public_html` with a symlink:
+`ln -s ~/lendyra/public ~/public_html` (or set the domain's document root
+to `~/lendyra/public` in cPanel → Domains).
+
+**Option 2:** upload the app to a private folder (e.g. `~/lendyra`), move
+the CONTENTS of `~/lendyra/public/` into `public_html/`, then edit
+`public_html/index.php` and change the three `__DIR__.'/../` paths so they
+point at the app folder:
+
+```php
+if (file_exists($maintenance = __DIR__.'/../lendyra/storage/framework/maintenance.php')) {
+require __DIR__.'/../lendyra/vendor/autoload.php';
+$app = require_once __DIR__.'/../lendyra/bootstrap/app.php';
+```
+
+(Adjust `/../lendyra` to wherever you placed the app relative to
+`public_html`.) The `storage:link` symlink must then point from
+`public_html/storage` to `~/lendyra/storage/app/public`.
+
 ## Cron
 
-Penalties accrue once a day via the scheduler. Add ONE system cron entry:
+The scheduler drives daily penalty accrual, SMS payment reminders and (only
+if demo mode is enabled) the nightly demo reset. Add ONE system cron entry:
 
 ```
 * * * * * php /path/to/app/artisan schedule:run >> /dev/null 2>&1
@@ -43,6 +78,45 @@ php artisan loans:accrue-penalties --date=2026-07-01
 Accrual is idempotent — running it repeatedly for the same date never
 double-charges.
 
+## SMS payment reminders
+
+The scheduler runs `loans:send-reminders` daily at 09:00 (server time). It
+sends two kinds of messages, deduplicated through the `sms_logs` table so a
+borrower is never texted twice for the same installment on the same basis:
+
+- **Upcoming** — installment due in exactly N days (N below, default 3)
+- **Overdue** — unpaid installment past its due date, one notice per week
+
+Configure in `.env`:
+
+```
+LMS_SMS_DRIVER=log        # log | http
+LMS_SMS_HTTP_URL=         # required for the http driver
+LMS_SMS_HTTP_TOKEN=       # optional bearer token
+LMS_SMS_REMINDER_DAYS=3   # days before the due date for the "upcoming" reminder
+```
+
+- `log` (default) writes each message to `storage/logs/laravel.log` — safe
+  for testing, nothing is actually sent.
+- `http` POSTs JSON `{"to": "<phone>", "message": "<text>"}` to
+  `LMS_SMS_HTTP_URL` (10-second timeout). If `LMS_SMS_HTTP_TOKEN` is set it
+  is sent as an `Authorization: Bearer` header. Any 2xx response counts as
+  sent; anything else (or a connection error) is recorded as failed. This
+  generic contract adapts to almost any local SMS gateway or aggregator —
+  point the URL at your gateway or at a small relay script that reformats
+  the payload.
+
+Every attempt (sent or failed) is visible in the app under **SMS Logs**
+(`/sms-logs`, admin and manager roles). You can also run or backfill
+manually: `php artisan loans:send-reminders [--date=YYYY-MM-DD]`.
+
+## Demo mode
+
+`LMS_DEMO_MODE=true` blocks destructive account changes (user, profile,
+product and branch edits) and schedules a nightly `demo:reset` at 03:00
+that wipes all business data and reseeds the demo dataset. It exists for
+running a public demo — never enable it in production.
+
 ## Email (password reset)
 
 "Forgot password" emails use Laravel's mail system. Set the `MAIL_*`
@@ -50,6 +124,15 @@ variables in `.env` (SMTP host, port, username, password, from address).
 With the default `MAIL_MAILER=log`, reset links are written to
 `storage/logs/laravel.log` instead of being sent — fine for testing,
 not for production.
+
+## Running behind a reverse proxy / load balancer
+
+By default the app trusts no proxies: `X-Forwarded-*` headers from clients
+are ignored, so nobody can spoof their IP address to dodge the login rate
+limiter. If you run behind nginx, a load balancer, or a CDN, set
+`TRUSTED_PROXIES` in `.env` to a comma-separated list of your proxy IPs
+(for example `TRUSTED_PROXIES=127.0.0.1` for a local nginx, or
+`TRUSTED_PROXIES=*` if the app is only reachable through the proxy).
 
 ## Branch scoping (optional)
 
@@ -75,4 +158,5 @@ Copy `lang/en.json` to `lang/<locale>.json`, translate the values, and set
 | Redirected to `/install` after installing | `storage/app/installed.lock` missing — create it |
 | 500 after moving servers | `php artisan optimize:clear`; check `storage/` permissions |
 | Styles missing | Web root must be `public/`; check `public/build/` was uploaded |
+| Uploaded photos don't display | `public/storage` link missing — run `php artisan storage:link` or create the symlink manually (see above) |
 | "Connection failed" in installer | Verify the DB user can connect from the web host (not just localhost) |

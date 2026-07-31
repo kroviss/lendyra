@@ -4,8 +4,7 @@ namespace App\Console\Commands;
 
 use App\Enums\LoanStatus;
 use App\Models\LoanInstallment;
-use App\Services\Sms\HttpSms;
-use App\Services\Sms\LogSms;
+use App\Services\Sms\SmsFactory;
 use App\Services\Sms\SmsSender;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -24,35 +23,39 @@ class SendReminders extends Command
         $sender = $this->sender();
         $sent = 0;
 
-        // Upcoming: due exactly N days from now.
+        // Upcoming: due within the next N days. Matching a window instead
+        // of one exact date means a missed cron day never silently skips a
+        // borrower; the dedup key (installment + due date) keeps the
+        // overlapping days from repeating anyone.
         $sent += $this->process(
             kind: 'upcoming',
-            dueDate: $today->copy()->addDays($daysBefore)->format('Y-m-d'),
             template: fn ($i, $due) => __('Reminder: installment of :amount for loan :loan is due on :date.', [
                 'amount' => $due->totalDue()->formatted(),
                 'loan' => $i->loan->loan_number,
                 'date' => $i->due_date->format('Y-m-d'),
             ]),
             sender: $sender,
-            query: fn ($q) => $q->where('due_date', $today->copy()->addDays($daysBefore)->format('Y-m-d')),
+            query: fn ($q) => $q->whereBetween('due_date', [
+                $today->format('Y-m-d'),
+                $today->copy()->addDays($daysBefore)->format('Y-m-d'),
+            ]),
+            sentFor: fn (LoanInstallment $i) => $i->due_date->format('Y-m-d'),
         );
 
-        // Overdue: anything unpaid and past due, one notice per week.
+        // Overdue: any unpaid past-due installment with no overdue notice
+        // in the last 7 days — the weekly cadence survives missed runs and
+        // never ages out, no matter how old the arrears.
         $sent += $this->process(
             kind: 'overdue',
-            dueDate: $today->format('Y-m-d'),
             template: fn ($i, $due) => __('OVERDUE: :amount for loan :loan was due :date. Please pay to avoid further penalties.', [
                 'amount' => $due->totalDue()->formatted(),
                 'loan' => $i->loan->loan_number,
                 'date' => $i->due_date->format('Y-m-d'),
             ]),
             sender: $sender,
-            // Weekly notices: compute the exact due-dates that are a
-            // multiple of 7 days old, so the query stays index-eligible
-            // (a DATEDIFF() % 7 predicate full-scans the table nightly).
-            query: fn ($q) => $q->whereIn('due_date', collect(range(1, 52))
-                ->map(fn (int $week) => $today->copy()->subWeeks($week)->format('Y-m-d'))
-                ->all()),
+            query: fn ($q) => $q->where('due_date', '<', $today->format('Y-m-d')),
+            sentFor: fn (LoanInstallment $i) => $today->format('Y-m-d'),
+            notifiedSince: $today->copy()->subDays(6)->format('Y-m-d'),
         );
 
         $this->info("{$sent} reminder(s) sent.");
@@ -60,7 +63,12 @@ class SendReminders extends Command
         return self::SUCCESS;
     }
 
-    private function process(string $kind, string $dueDate, callable $template, SmsSender $sender, callable $query): int
+    /**
+     * @param  callable  $sentFor  maps an installment to its dedup date
+     * @param  ?string  $notifiedSince  skip installments already notified on
+     *                                  or after this date (null = ever)
+     */
+    private function process(string $kind, callable $template, SmsSender $sender, callable $query, callable $sentFor, ?string $notifiedSince = null): int
     {
         $count = 0;
 
@@ -69,12 +77,12 @@ class SendReminders extends Command
             ->whereHas('loan', fn ($q) => $q->where('status', LoanStatus::Active))
             ->tap($query)
             ->with('loan.borrower')
-            ->chunkById(100, function ($installments) use ($kind, $dueDate, $template, $sender, &$count) {
+            ->chunkById(100, function ($installments) use ($kind, $template, $sender, $sentFor, $notifiedSince, &$count) {
                 // One dedup lookup per chunk instead of one per installment.
                 $alreadySent = DB::table('sms_logs')
                     ->where('kind', $kind)
-                    ->where('sent_for', $dueDate)
                     ->whereIn('loan_installment_id', $installments->pluck('id'))
+                    ->when($notifiedSince !== null, fn ($q) => $q->where('sent_for', '>=', $notifiedSince))
                     ->pluck('loan_installment_id')
                     ->all();
 
@@ -90,14 +98,17 @@ class SendReminders extends Command
                     }
 
                     $message = $template($installment, $installment->toDue());
+                    $for = $sentFor($installment);
 
                     // Log BEFORE sending: a crash between the two must never
                     // cause a duplicate SMS on the next run (logged-but-unsent
-                    // is the safer failure mode).
-                    $logId = DB::table('sms_logs')->insertGetId([
+                    // is the safer failure mode). insertOrIgnore rides the
+                    // sms_dedup unique index, so a manual run racing the cron
+                    // loses this row quietly instead of dying mid-chunk.
+                    $inserted = DB::table('sms_logs')->insertOrIgnore([
                         'loan_installment_id' => $installment->id,
                         'kind' => $kind,
-                        'sent_for' => $dueDate,
+                        'sent_for' => $for,
                         'to' => $phone,
                         'message' => $message,
                         'status' => 'failed',
@@ -105,8 +116,16 @@ class SendReminders extends Command
                         'updated_at' => now(),
                     ]);
 
+                    if ($inserted === 0) {
+                        continue; // the racing run owns this reminder
+                    }
+
                     if ($sender->send($phone, $message)) {
-                        DB::table('sms_logs')->where('id', $logId)->update(['status' => 'sent', 'updated_at' => now()]);
+                        DB::table('sms_logs')
+                            ->where('loan_installment_id', $installment->id)
+                            ->where('kind', $kind)
+                            ->where('sent_for', $for)
+                            ->update(['status' => 'sent', 'updated_at' => now()]);
                     }
 
                     $count++;
@@ -118,6 +137,6 @@ class SendReminders extends Command
 
     private function sender(): SmsSender
     {
-        return \App\Services\Sms\SmsFactory::make();
+        return SmsFactory::make();
     }
 }
