@@ -13,7 +13,7 @@
             <button x-on:click="sidebarOpen = true" class="rounded-md p-2 text-gray-500 hover:bg-gray-50" aria-label="{{ __('Menu') }}">
                 <svg class="size-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg>
             </button>
-            <span class="font-semibold">{{ config('app.name') }}</span>
+            <a href="{{ route('dashboard') }}" class="font-semibold">{{ config('app.name') }}</a>
         </div>
 
         {{-- Mobile overlay --}}
@@ -24,8 +24,10 @@
             :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'"
             class="fixed inset-y-0 left-0 z-40 flex w-60 -translate-x-full flex-col border-r border-gray-200 bg-white transition-transform lg:z-20 lg:translate-x-0">
             <div class="flex h-16 items-center gap-2 border-b border-gray-100 px-5">
-                <div class="flex size-8 items-center justify-center rounded-lg bg-indigo-600 text-sm font-bold text-white">L</div>
-                <span class="text-lg font-semibold">{{ config('app.name') }}</span>
+                <a href="{{ route('dashboard') }}" class="flex items-center gap-2">
+                    <span class="flex size-8 items-center justify-center rounded-lg bg-indigo-600 text-sm font-bold text-white">L</span>
+                    <span class="text-lg font-semibold">{{ config('app.name') }}</span>
+                </a>
                 <button x-on:click="sidebarOpen = false" class="ml-auto rounded-md p-1.5 text-gray-400 hover:bg-gray-50 lg:hidden" aria-label="{{ __('Close menu') }}">
                     <svg class="size-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
                 </button>
