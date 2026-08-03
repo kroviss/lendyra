@@ -7,7 +7,6 @@ use App\Models\LoanInstallment;
 use App\Models\LoanPayment;
 use DateTimeImmutable;
 use Illuminate\Support\Facades\DB;
-use LoanEngine\Money;
 use LoanEngine\PayoffQuote;
 use LoanEngine\PayoffQuoter;
 
@@ -16,8 +15,7 @@ class PayoffService
     public function __construct(
         private readonly LoanScheduleService $schedules,
         private readonly RepaymentService $repayments,
-    ) {
-    }
+    ) {}
 
     public function quote(Loan $loan, DateTimeImmutable $asOf): PayoffQuote
     {
@@ -41,10 +39,16 @@ class PayoffService
         return DB::transaction(function () use ($loan, $asOf, $method, $receivedBy) {
             // Lock + re-check: a concurrent settle/payment must not produce
             // a second full payoff booked as overpayment.
-            $loan = \App\Models\Loan::lockForUpdate()->findOrFail($loan->id);
+            $loan = Loan::lockForUpdate()->findOrFail($loan->id);
 
             if (! $loan->status->acceptsPayments()) {
                 throw new \LogicException("Loan {$loan->loan_number} is {$loan->status->value} and cannot be settled.");
+            }
+
+            // A payoff dated before disbursement would make every
+            // installment "future" and waive 100% of the interest.
+            if ($loan->disbursed_at !== null && $asOf->format('Y-m-d') < $loan->disbursed_at->format('Y-m-d')) {
+                throw new \LogicException(__('Payoff date cannot be before the disbursement date.'));
             }
 
             $loan->installments()->lockForUpdate()->get();
@@ -82,6 +86,7 @@ class PayoffService
                 method: $method,
                 reference: 'payoff',
                 receivedBy: $receivedBy,
+                isPayoff: true,
             );
         });
     }

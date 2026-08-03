@@ -85,6 +85,11 @@ class Loan extends Model
         return $this->belongsTo(User::class, 'disbursed_by');
     }
 
+    public function rejectedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'rejected_by');
+    }
+
     public function collaterals(): HasMany
     {
         return $this->hasMany(Collateral::class);

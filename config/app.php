@@ -17,6 +17,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Application Version
+    |--------------------------------------------------------------------------
+    |
+    | Shown in the UI footer and used by support to identify what a buyer
+    | is running. Bump together with CHANGELOG.md and the dist zip name.
+    |
+    */
+
+    'version' => '1.0.2',
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Environment
     |--------------------------------------------------------------------------
     |

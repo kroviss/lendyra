@@ -2,7 +2,7 @@
 
 
 Self-hosted loan management for micro-lenders, MFIs, pawnshops and
-credit cooperatives. Built with Laravel 12+, Livewire 3 and Tailwind CSS.
+credit cooperatives. Built with Laravel 13, Livewire 3 and Tailwind CSS.
 
 ## What makes it different
 
@@ -32,9 +32,10 @@ Portfolio report · Daily penalty cron · Web installer · Translatable
 
 ## Requirements
 
-- PHP 8.3+ (pdo_mysql, mbstring, openssl, ctype, curl, fileinfo)
+- PHP 8.3+ (pdo_mysql, mbstring, openssl, ctype, curl, fileinfo, dom, xml, tokenizer)
 - MySQL 8 / MariaDB 10.6+
-- Any hosting that runs Laravel (shared hosting OK)
+- Any hosting that runs Laravel (shared hosting OK) — the app must be served
+  from the domain root or a subdomain, not a URL subdirectory
 
 ## Installation
 

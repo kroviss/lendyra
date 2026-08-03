@@ -35,6 +35,15 @@
             <label class="mb-1 block text-sm font-medium text-gray-700">{{ __('Table prefix (optional)') }}</label>
             <input name="prefix" value="{{ old('prefix') }}" class="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" placeholder="lms_" />
         </div>
+        <div>
+            <label for="timezone" class="mb-1 block text-sm font-medium text-gray-700">{{ __('Timezone') }}</label>
+            <select id="timezone" name="timezone" class="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+                @foreach (DateTimeZone::listIdentifiers() as $tz)
+                    <option value="{{ $tz }}" @selected(old('timezone', 'UTC') === $tz)>{{ $tz }}</option>
+                @endforeach
+            </select>
+            <p class="mt-1 text-xs text-gray-400">{{ __('Due dates, penalty accrual and the daily schedule all run in this timezone.') }}</p>
+        </div>
 
         <button type="submit" class="w-full rounded-lg bg-indigo-600 py-2 text-sm font-medium text-white hover:bg-indigo-500">
             {{ __('Test connection & migrate') }} →

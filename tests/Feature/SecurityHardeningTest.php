@@ -247,8 +247,8 @@ class SecurityHardeningTest extends TestCase
         Storage::disk('public')->assertMissing($borrower->photo_path);
     }
 
-    /** F8: media URLs require login; authenticated staff can stream them. */
-    public function test_media_route_requires_authentication(): void
+    /** F8: media URLs require login, an owning record, and matching branch scope. */
+    public function test_media_route_requires_authentication_and_ownership(): void
     {
         Storage::fake('local');
         Storage::disk('local')->put('borrowers/secret.jpg', 'jpeg-bytes');
@@ -256,12 +256,35 @@ class SecurityHardeningTest extends TestCase
         $this->get('/media/borrowers/secret.jpg')->assertRedirect('/login');
 
         $staff = $this->makeUser();
-        $this->actingAs($staff)->get('/media/borrowers/secret.jpg')->assertOk();
 
-        // Legacy fallback: files still sitting on the public disk stream too.
+        // Orphan files no record points to are never served.
+        $this->actingAs($staff)->get('/media/borrowers/secret.jpg')->assertNotFound();
+
+        $borrower = Borrower::create([
+            'first_name' => 'Media', 'last_name' => 'Owner',
+            'phone' => '+1555'.random_int(1000000, 9999999),
+            'photo_path' => 'borrowers/secret.jpg',
+        ]);
+        $this->actingAs($staff)->get('/media/borrowers/secret.jpg')
+            ->assertOk()
+            ->assertHeader('X-Content-Type-Options', 'nosniff');
+
+        // The legacy public-disk fallback is gone: it bypassed auth via
+        // the world-readable /storage symlink.
         Storage::fake('public');
         Storage::disk('public')->put('collaterals/legacy.jpg', 'jpeg-bytes');
-        $this->actingAs($staff)->get('/media/collaterals/legacy.jpg')->assertOk();
+        $this->actingAs($staff)->get('/media/collaterals/legacy.jpg')->assertNotFound();
+
+        // Photos are branch-scoped exactly like the pages that link them.
+        config(['lms.branch_scoping' => true]);
+        $branchA = $this->makeBranch();
+        $branchB = $this->makeBranch();
+        $borrower->update(['branch_id' => $branchB->id]);
+        $scoped = $this->makeUser('loan_officer', $branchA->id);
+        $this->flushSession(); // AuthenticateSession pins the previous user's hash
+        $this->actingAs($scoped)->get('/media/borrowers/secret.jpg')->assertForbidden();
+        config(['lms.branch_scoping' => false]);
+        $this->flushSession();
 
         // Whitelisted types and no traversal.
         $this->actingAs($staff)->get('/media/logs/laravel.log')->assertNotFound();

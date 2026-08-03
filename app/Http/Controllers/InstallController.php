@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use PDO;
 use Throwable;
 
@@ -47,6 +48,7 @@ class InstallController extends Controller
             'username' => 'required',
             'password' => 'nullable',
             'prefix' => 'nullable|alpha_dash|max:16',
+            'timezone' => 'required|timezone:all',
         ]);
 
         $data['password'] = $data['password'] ?? '';
@@ -60,7 +62,9 @@ class InstallController extends Controller
                 [PDO::ATTR_TIMEOUT => 5, PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
             );
         } catch (Throwable $e) {
-            return back()->withInput()->withErrors(['database' => __('Connection failed: ').$e->getMessage()]);
+            report($e);
+
+            return back()->withInput()->withErrors(['database' => __('Connection failed: ').$this->sanitizedError($e)]);
         }
 
         $this->writeEnv([
@@ -74,6 +78,7 @@ class InstallController extends Controller
             'DB_USERNAME' => $data['username'],
             'DB_PASSWORD' => $data['password'],
             'DB_PREFIX' => $data['prefix'],
+            'APP_TIMEZONE' => $data['timezone'],
             'SESSION_DRIVER' => 'file',
             'CACHE_STORE' => 'file',
             'QUEUE_CONNECTION' => 'sync',
@@ -97,7 +102,9 @@ class InstallController extends Controller
             }
             Artisan::call('migrate', ['--force' => true]);
         } catch (Throwable $e) {
-            return back()->withInput()->withErrors(['database' => __('Migration failed: ').$e->getMessage()]);
+            report($e);
+
+            return back()->withInput()->withErrors(['database' => __('Migration failed: ').$this->sanitizedError($e)]);
         }
 
         // storage:link fails on hosts where symlink() is disabled. That must
@@ -231,6 +238,18 @@ class InstallController extends Controller
         }
 
         return $warnings;
+    }
+
+    /**
+     * Keep the useful first part of a DB error (SQLSTATE, access denied,
+     * unknown host) but strip filesystem paths and cap the length — this
+     * page is reachable unauthenticated while no install lock exists.
+     */
+    private function sanitizedError(Throwable $e): string
+    {
+        $message = preg_replace('#/[^\s]+#', '…', (string) $e->getMessage());
+
+        return Str::limit(strtok($message, "\n"), 200);
     }
 
     private function writeEnv(array $values): void

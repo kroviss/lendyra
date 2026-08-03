@@ -48,6 +48,6 @@ class Index extends BaseTable
 
     public function render(): View
     {
-        return view('livewire.borrowers.index', ['columns' => $this->columns()]);
+        return view('livewire.borrowers.index', ['columns' => $this->columns()])->title(__('Borrowers'));
     }
 }

@@ -98,6 +98,6 @@ class Form extends Component
 
     public function render(): View
     {
-        return view('livewire.branches.form');
+        return view('livewire.branches.form')->title($this->branch?->exists ? __('Edit branch') : __('New branch'));
     }
 }

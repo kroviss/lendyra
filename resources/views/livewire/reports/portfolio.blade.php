@@ -4,7 +4,10 @@
         <div class="flex gap-2 text-sm">
             <span class="rounded-lg bg-indigo-600 px-3 py-1.5 font-medium text-white">{{ __('Portfolio') }}</span>
             <a href="{{ route('reports.collections') }}" class="rounded-lg border border-gray-300 bg-white px-3 py-1.5 font-medium text-gray-700 hover:bg-gray-50">{{ __('Collections') }}</a>
-            <a href="{{ route('reports.trial-balance') }}" class="rounded-lg border border-gray-300 bg-white px-3 py-1.5 font-medium text-gray-700 hover:bg-gray-50">{{ __('Trial Balance') }}</a>
+            {{-- Trial balance 403s for branch-scoped accounts — don't offer a dead-end tab. --}}
+            @if (auth()->user()?->scopedBranchId() === null)
+                <a href="{{ route('reports.trial-balance') }}" class="rounded-lg border border-gray-300 bg-white px-3 py-1.5 font-medium text-gray-700 hover:bg-gray-50">{{ __('Trial Balance') }}</a>
+            @endif
         </div>
     </div>
 
@@ -22,6 +25,11 @@
     </div>
 
     <h2 class="mb-3 text-base font-semibold">{{ __('Overdue loans') }}</h2>
+    @if ($overdueTotal > count($overdueRows))
+        <p class="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+            {{ __('Showing the :shown worst of :total overdue loans — use Collections → Overdue for the full list.', ['shown' => count($overdueRows), 'total' => $overdueTotal]) }}
+        </p>
+    @endif
     <div class="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
         <table class="w-full text-sm">
             <thead class="bg-gray-50 text-xs uppercase text-gray-500">
@@ -36,7 +44,7 @@
             <tbody>
                 @forelse ($overdueRows as $row)
                     <tr class="cursor-pointer border-t border-gray-100 hover:bg-gray-50"
-                        x-on:click="window.location = '{{ route('loans.show', $row['id']) }}'">
+                        x-on:click="window.location = @js(route('loans.show', $row['id']))">
                         <td class="px-4 py-2 font-medium">{{ $row['loan_number'] }}</td>
                         <td class="px-4 py-2">{{ $row['borrower'] }}</td>
                         <td class="px-4 py-2 text-right">

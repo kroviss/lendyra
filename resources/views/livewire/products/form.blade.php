@@ -11,7 +11,20 @@
                 <x-tablewire::inputs.text label="{{ __('Name') }}" wire:model.blur="name" required />
                 <x-tablewire::inputs.text label="{{ __('Code') }}" wire:model.blur="code" required hint="{{ __('Unique, e.g. BIZ-12') }}" />
                 <x-tablewire::inputs.text label="{{ __('Currency (ISO)') }}" wire:model.blur="currency" required />
+                <x-tablewire::inputs.text label="{{ __('Decimal places') }}" type="number" min="0" max="6" wire:model.blur="scale" required
+                    hint="{{ __('Minor units per whole unit, e.g. 2 for cents. Locked once loans exist.') }}" />
                 <x-tablewire::inputs.toggle label="{{ __('Active') }}" wire:model="is_active" />
+            </div>
+        </div>
+
+        <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <h2 class="mb-4 text-base font-semibold">{{ __('Limits & fees') }}</h2>
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <x-tablewire::inputs.text label="{{ __('Minimum principal') }}" type="number" min="0" step="0.01" wire:model.blur="min_principal" hint="{{ __('Empty = no minimum') }}" />
+                <x-tablewire::inputs.text label="{{ __('Maximum principal') }}" type="number" min="0" step="0.01" wire:model.blur="max_principal" hint="{{ __('Empty = no maximum') }}" />
+                <x-tablewire::inputs.text label="{{ __('Processing fee %') }}" type="number" min="0" step="0.01" wire:model.blur="processing_fee_percent" required
+                    hint="{{ __('Charged on disbursement, % of principal') }}" />
+                <x-tablewire::inputs.text label="{{ __('Processing fee flat') }}" type="number" min="0" step="0.01" wire:model.blur="processing_fee_flat" hint="{{ __('Fixed amount added to the fee') }}" />
             </div>
         </div>
 

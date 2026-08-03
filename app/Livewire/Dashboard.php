@@ -64,10 +64,13 @@ class Dashboard extends Component
 
         // startOfMonth BEFORE subMonths — subtracting months from e.g.
         // Jul 30 overflows through Feb 30 into March and loses a bucket.
+        // Translatable month keys — format('M') is always English.
+        $monthLabel = fn ($month) => __($month->format('M'));
+
         $chart = [];
         for ($i = 5; $i >= 0; $i--) {
             $month = now()->startOfMonth()->subMonths($i);
-            $chart[$month->format('M')] = 0;
+            $chart[$monthLabel($month)] = 0;
         }
 
         $monthly = LoanPayment::query()
@@ -84,7 +87,7 @@ class Dashboard extends Component
 
         for ($i = 5; $i >= 0; $i--) {
             $month = now()->startOfMonth()->subMonths($i);
-            $chart[$month->format('M')] = (int) ($monthly[$month->format('Y-m')] ?? 0);
+            $chart[$monthLabel($month)] = (int) ($monthly[$month->format('Y-m')] ?? 0);
         }
 
         $chartMax = max(1, max($chart));
@@ -105,7 +108,7 @@ class Dashboard extends Component
             'outstanding' => $this->formatByCurrency($outstandingByCurrency),
             'overdueCount' => $overdueCount,
             'collectedThisMonth' => $this->formatByCurrency($collectedByCurrency),
-        ]);
+        ])->title(__('Dashboard'));
     }
 
     private function formatByCurrency(array $byCurrency): string

@@ -14,6 +14,10 @@
             <p class="mb-4 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">{{ session('status') }}</p>
         @endif
 
+        @if (config('mail.default') === 'log')
+            <p class="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">{{ __('Password reset requires a configured mail server. Ask your administrator to set the MAIL_* settings.') }}</p>
+        @endif
+
         <form method="POST" action="{{ route('password.email') }}" class="space-y-4">
             @csrf
             <div>

@@ -32,6 +32,11 @@ class Show extends Component
 
         $borrower = Borrower::findOrFail($this->borrowerId);
 
+        // Re-check branch scope on the write: mount's check can be stale
+        // (borrower reassigned since the page loaded).
+        $scoped = auth()->user()?->scopedBranchId();
+        abort_if($scoped !== null && $borrower->branch_id !== null && (int) $borrower->branch_id !== $scoped, 403);
+
         if ($borrower->loans()->withTrashed()->exists()) {
             $this->dispatch('toast', message: __('Cannot delete: this borrower has loan history.'));
 

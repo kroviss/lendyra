@@ -9,15 +9,20 @@
                 <option value="month">{{ __('Due this month') }}</option>
                 <option value="overdue">{{ __('Overdue') }}</option>
             </select>
-            <input type="search" wire:model.live.debounce.400ms="search" placeholder="{{ __('Search...') }}"
+            <input type="search" wire:model.live.debounce.400ms="search" placeholder="{{ __('Search...') }}" aria-label="{{ __('Search') }}"
                 class="w-56 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40" />
+            <button wire:click="exportCsv" wire:loading.attr="disabled" wire:target="exportCsv"
+                class="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                {{ __('Export CSV') }}
+            </button>
         </div>
         <div class="flex gap-2 text-sm">
             @if (in_array(auth()->user()?->role, ['admin', 'manager', 'accountant'], true))
                 <a href="{{ route('reports.portfolio') }}" class="rounded-lg border border-gray-300 bg-white px-3 py-1.5 font-medium text-gray-700 hover:bg-gray-50">{{ __('Portfolio') }}</a>
             @endif
             <span class="rounded-lg bg-indigo-600 px-3 py-1.5 font-medium text-white">{{ __('Collections') }}</span>
-            @if (in_array(auth()->user()?->role, ['admin', 'manager', 'accountant'], true))
+            {{-- Trial balance 403s for branch-scoped accounts — don't offer a dead-end tab. --}}
+            @if (in_array(auth()->user()?->role, ['admin', 'manager', 'accountant'], true) && auth()->user()?->scopedBranchId() === null)
                 <a href="{{ route('reports.trial-balance') }}" class="rounded-lg border border-gray-300 bg-white px-3 py-1.5 font-medium text-gray-700 hover:bg-gray-50">{{ __('Trial Balance') }}</a>
             @endif
         </div>
@@ -46,7 +51,7 @@
                 @forelse ($installments as $installment)
                     @php $due = $installment->toDue(); @endphp
                     <tr class="cursor-pointer border-t border-gray-100 hover:bg-gray-50 {{ $installment->due_date->isPast() ? 'bg-red-50/40' : '' }}"
-                        x-on:click="window.location = '{{ route('loans.show', $installment->loan_id) }}'">
+                        x-on:click="window.location = @js(route('loans.show', $installment->loan_id))">
                         <td class="px-4 py-2">{{ $installment->due_date->format('Y-m-d') }}</td>
                         <td class="px-4 py-2 font-medium">{{ $installment->loan->loan_number }}</td>
                         <td class="px-4 py-2">{{ $installment->loan->borrower->fullName() }}</td>

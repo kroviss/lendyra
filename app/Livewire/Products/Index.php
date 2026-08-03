@@ -57,6 +57,6 @@ class Index extends BaseTable
 
     public function render(): View
     {
-        return view('livewire.products.index', ['columns' => $this->columns()]);
+        return view('livewire.products.index', ['columns' => $this->columns()])->title(__('Products'));
     }
 }

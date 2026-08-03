@@ -28,7 +28,10 @@ rsync -a "$ROOT/" "$STAGE/" \
     --exclude 'storage/framework/cache/*' \
     --exclude 'storage/framework/sessions/*' \
     --exclude 'storage/framework/views/*.php' \
+    --exclude 'storage/framework/testing' \
     --exclude 'storage/app/public/*' \
+    --exclude 'storage/app/private/*' \
+    --exclude 'storage/app/livewire-tmp' \
     --exclude 'public/storage'
 
 # rsync excluded the cache contents wholesale — recreate the skeleton the

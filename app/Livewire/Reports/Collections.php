@@ -10,6 +10,7 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\DB;
 use Livewire\Component;
 use Livewire\WithPagination;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Forward-looking collections sheet: which installments are expected
@@ -39,7 +40,51 @@ class Collections extends Component
         $this->resetPage();
     }
 
-    public function render(): View
+    /**
+     * The route sheet leaves the office: stream the whole current window
+     * as CSV (same filters as the page, capped like tablewire exports).
+     */
+    public function exportCsv(): StreamedResponse
+    {
+        $query = $this->buildQuery();
+
+        return response()->streamDownload(function () use ($query) {
+            $out = fopen('php://output', 'w');
+            fwrite($out, "\xEF\xBB\xBF");
+            fputcsv($out, [__('Due date'), __('Loan #'), __('Borrower'), __('Phone'), __('Principal'), __('Interest'), __('Penalty'), __('Total due'), __('Currency')]);
+
+            $limit = (int) config('tablewire.export_limit', 10000);
+
+            for ($offset = 0; $offset < $limit; $offset += 500) {
+                $rows = (clone $query)->skip($offset)->take(min(500, $limit - $offset))->get();
+
+                foreach ($rows as $installment) {
+                    $due = $installment->toDue();
+                    $clean = fn (string $v) => preg_match('/^[=+\-@\t\r]/', $v) ? "'".$v : $v;
+
+                    fputcsv($out, [
+                        $installment->due_date->format('Y-m-d'),
+                        $clean($installment->loan->loan_number),
+                        $clean($installment->loan->borrower->fullName()),
+                        $clean((string) $installment->loan->borrower->phone),
+                        $due->principalDue->toDecimalString(),
+                        $due->interestDue->toDecimalString(),
+                        $due->penaltyDue->toDecimalString(),
+                        $due->totalDue()->toDecimalString(),
+                        $installment->loan->currency,
+                    ]);
+                }
+
+                if ($rows->count() < 500) {
+                    break;
+                }
+            }
+
+            fclose($out);
+        }, 'collections-'.$this->window.'-'.now()->format('Ymd-His').'.csv');
+    }
+
+    private function buildQuery()
     {
         [$from, $to] = match ($this->window) {
             'week' => [today(), today()->endOfWeek()],
@@ -48,7 +93,7 @@ class Collections extends Component
             default => [today(), today()],
         };
 
-        $query = LoanInstallment::query()
+        return LoanInstallment::query()
             ->whereNull('settled_at')
             ->whereHas('loan', fn ($q) => $q->where('status', LoanStatus::Active)
                 ->when(auth()->user()?->scopedBranchId(), fn ($l, $branch) => $l->where(fn ($b) => $b->where('branch_id', $branch)->orWhereNull('branch_id'))))
@@ -65,6 +110,11 @@ class Collections extends Component
                         ->orWhere('phone', 'like', $like)));
             })
             ->orderBy('due_date');
+    }
+
+    public function render(): View
+    {
+        $query = $this->buildQuery();
 
         // Expected totals per currency for the whole window (not just this
         // page) — SQL aggregate, grouped per loan then mapped to currency.
@@ -94,6 +144,6 @@ class Collections extends Component
         return view('livewire.reports.collections', [
             'installments' => $query->paginate(25),
             'totalLabel' => $totalLabel,
-        ]);
+        ])->title(__('Collections'));
     }
 }

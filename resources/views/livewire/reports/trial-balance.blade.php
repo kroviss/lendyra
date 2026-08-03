@@ -31,7 +31,7 @@
                     <tr class="border-t border-gray-100">
                         <td class="px-4 py-2 font-mono text-xs">{{ $row['code'] }}</td>
                         <td class="px-4 py-2 font-medium">{{ $row['name'] }}</td>
-                        <td class="px-4 py-2 capitalize text-gray-500">{{ $row['type'] }}</td>
+                        <td class="px-4 py-2 text-gray-500">{{ __(ucfirst($row['type'])) }}</td>
                         <td class="px-4 py-2 text-right">{{ $row['debits'] }}</td>
                         <td class="px-4 py-2 text-right">{{ $row['credits'] }}</td>
                         <td class="px-4 py-2 text-right font-medium">{{ $row['balance'] }}</td>

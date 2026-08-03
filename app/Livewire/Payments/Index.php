@@ -132,6 +132,6 @@ class Index extends BaseTable
             'columns' => $this->columns(),
             'totalLabel' => $totals === [] ? '0.00' : $format($totals),
             'methodTotals' => collect($byMethod)->map($format)->all(),
-        ]);
+        ])->title(__('Payments'));
     }
 }

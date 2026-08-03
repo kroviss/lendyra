@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
@@ -50,6 +51,11 @@ class Show extends Component
 
     public string $payoffMethod = 'cash';
 
+    // Reject modal state
+    public bool $showRejectModal = false;
+
+    public string $rejectReason = '';
+
     // Collateral modal state
     public bool $showCollateralModal = false;
 
@@ -61,6 +67,9 @@ class Show extends Component
 
     /** @var TemporaryUploadedFile[] */
     public array $collateralPhotos = [];
+
+    /** Stored photo paths kept while editing; entries the user removes are deleted on save. */
+    public array $existingCollateralPhotos = [];
 
     public ?int $editingCollateralId = null;
 
@@ -97,7 +106,7 @@ class Show extends Component
         $loan = Loan::with([
             'borrower', 'product', 'installments',
             'payments.allocations.installment', 'payments.receivedBy',
-            'createdBy', 'approvedBy', 'disbursedBy',
+            'createdBy', 'approvedBy', 'disbursedBy', 'rejectedBy',
         ])->findOrFail($this->loanId);
 
         // Branch-scoped staff must not open another branch's loan by URL.
@@ -271,18 +280,28 @@ class Show extends Component
         }
     }
 
-    /** Opening/closing modals clears stale errors and edit state. */
+    /** Opening/closing modals clears stale errors, edit state and validation. */
     public function updated($property, $value): void
     {
         if (str_starts_with($property, 'show') && str_ends_with($property, 'Modal')) {
             $this->actionError = null;
+            $this->resetValidation();
 
             if ($value === false && $property === 'showCollateralModal') {
-                $this->reset('collateralType', 'collateralDescription', 'collateralValue', 'collateralPhotos', 'editingCollateralId');
+                $this->reset('collateralType', 'collateralDescription', 'collateralValue', 'collateralPhotos', 'existingCollateralPhotos', 'editingCollateralId');
             }
 
             if ($value === false && $property === 'showGuarantorModal') {
                 $this->reset('guarantorName', 'guarantorPhone', 'guarantorIdNumber', 'guarantorRelationship', 'editingGuarantorId');
+            }
+
+            if ($value === false && $property === 'showPaymentModal') {
+                $this->reset('paymentAmount', 'paymentReference');
+                $this->paymentDate = today()->format('Y-m-d');
+            }
+
+            if ($value === false && $property === 'showRejectModal') {
+                $this->reset('rejectReason');
             }
         }
     }
@@ -293,6 +312,8 @@ class Show extends Component
 
         try {
             Gate::authorize('activate-loans');
+
+            $this->validate(['rejectReason' => 'required|min:3|max:500']);
 
             DB::transaction(function () {
                 // Lock + re-check: rejecting must not race a concurrent
@@ -307,9 +328,13 @@ class Show extends Component
                     'status' => LoanStatus::Rejected,
                     'approved_by' => null,
                     'approved_at' => null,
+                    'reject_reason' => $this->rejectReason,
+                    'rejected_by' => auth()->id(),
+                    'rejected_at' => now(),
                 ]);
             });
 
+            $this->reset('showRejectModal', 'rejectReason');
             $this->dispatch('toast', message: __('Loan rejected'));
         } catch (ValidationException $e) {
             throw $e; // field errors stay inline
@@ -426,6 +451,35 @@ class Show extends Component
         }
     }
 
+    /**
+     * What the cashier needs while typing an amount: the next unpaid
+     * installment, total arrears, and the borrower's unused credit.
+     */
+    public function getPaymentContextProperty(): ?array
+    {
+        $loan = $this->loan();
+
+        if ($loan->installments->isEmpty()) {
+            return null;
+        }
+
+        $money = fn (int $minor) => Money::minor($minor, $loan->currency, (int) $loan->scale)->formatted();
+
+        $next = $loan->installments->first(fn ($i) => ! $i->isSettled());
+        $arrears = $loan->installments
+            ->filter(fn ($i) => ! $i->isSettled() && $i->due_date->isPast())
+            ->sum(fn ($i) => $i->toDue()->totalDue()->minor);
+        $credit = $loan->payments->whereNull('reversed_at')->sum('unallocated_minor');
+
+        return [
+            'nextDueLabel' => $next
+                ? $money($next->toDue()->totalDue()->minor).' ('.$next->due_date->format('Y-m-d').')'
+                : null,
+            'arrears' => $arrears > 0 ? $money((int) $arrears) : null,
+            'credit' => $credit > 0 ? $money((int) $credit) : null,
+        ];
+    }
+
     public function getPayoffQuoteProperty(): ?array
     {
         try {
@@ -449,7 +503,7 @@ class Show extends Component
     {
         $this->actionError = null;
         $this->validate([
-            'payoffDate' => 'required|date|before_or_equal:today',
+            'payoffDate' => 'required|date|before_or_equal:today|after_or_equal:'.($this->loan()->disbursed_at?->format('Y-m-d') ?? '2000-01-01'),
             'payoffMethod' => 'required|in:cash,bank,mobile',
         ]);
 
@@ -507,11 +561,19 @@ class Show extends Component
 
             if ($this->editingCollateralId) {
                 $collateral = $loan->collaterals()->findOrFail($this->editingCollateralId);
+
+                // Photos the user removed in the modal are gone from
+                // existingCollateralPhotos — delete their files too.
+                $removed = array_diff($collateral->photos ?? [], $this->existingCollateralPhotos);
+                foreach ($removed as $path) {
+                    Storage::disk('local')->delete($path);
+                }
+
                 $collateral->update([
                     'type' => $this->collateralType,
                     'description' => $this->collateralDescription ?: null,
                     'estimated_value_minor' => Money::of((string) $this->collateralValue, $loan->currency, (int) $loan->scale)->minor,
-                    'photos' => array_merge($collateral->photos ?? [], $photos) ?: null,
+                    'photos' => array_merge(array_values($this->existingCollateralPhotos), $photos) ?: null,
                 ]);
                 $message = __('Collateral updated');
             } else {
@@ -524,7 +586,7 @@ class Show extends Component
                 $message = __('Collateral added');
             }
 
-            $this->reset('showCollateralModal', 'collateralType', 'collateralDescription', 'collateralValue', 'collateralPhotos', 'editingCollateralId');
+            $this->reset('showCollateralModal', 'collateralType', 'collateralDescription', 'collateralValue', 'collateralPhotos', 'existingCollateralPhotos', 'editingCollateralId');
             $this->dispatch('toast', message: $message);
         } catch (ValidationException $e) {
             throw $e; // field errors stay inline
@@ -542,11 +604,13 @@ class Show extends Component
             // and on a closed loan it is the whole point, so no status gate.
             Gate::authorize('write-off-loans');
 
-            $this->loan()->collaterals()
+            $updated = $this->loan()->collaterals()
                 ->whereKey($collateralId)
                 ->update(['status' => 'released', 'released_at' => today()]);
 
-            $this->dispatch('toast', message: __('Collateral released'));
+            $this->dispatch('toast', message: $updated
+                ? __('Collateral released')
+                : __('That record no longer exists — refresh the page.'));
         } catch (ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
@@ -568,12 +632,20 @@ class Show extends Component
             $this->collateralType = $collateral->type;
             $this->collateralDescription = (string) ($collateral->description ?? '');
             $this->collateralValue = (float) Money::minor((int) $collateral->estimated_value_minor, $this->loan()->currency, (int) $this->loan()->scale)->toDecimalString();
+            $this->existingCollateralPhotos = array_values($collateral->photos ?? []);
             $this->showCollateralModal = true;
         } catch (ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
             $this->actionError = $this->friendlyError($e);
         }
+    }
+
+    /** Drop one stored photo from the collateral being edited (applies on save). */
+    public function removeExistingCollateralPhoto(int $index): void
+    {
+        unset($this->existingCollateralPhotos[$index]);
+        $this->existingCollateralPhotos = array_values($this->existingCollateralPhotos);
     }
 
     public function deleteCollateral(int $collateralId): void
@@ -584,9 +656,11 @@ class Show extends Component
             Gate::authorize('write-off-loans');
             $this->assertLoanMutable();
 
-            $this->loan()->collaterals()->whereKey($collateralId)->delete();
+            $deleted = $this->loan()->collaterals()->whereKey($collateralId)->delete();
 
-            $this->dispatch('toast', message: __('Collateral deleted'));
+            $this->dispatch('toast', message: $deleted
+                ? __('Collateral deleted')
+                : __('That record no longer exists — refresh the page.'));
         } catch (ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
@@ -667,9 +741,11 @@ class Show extends Component
             Gate::authorize('create-loans');
             $this->assertLoanMutable();
 
-            $this->loan()->guarantors()->whereKey($guarantorId)->delete();
+            $deleted = $this->loan()->guarantors()->whereKey($guarantorId)->delete();
 
-            $this->dispatch('toast', message: __('Guarantor removed'));
+            $this->dispatch('toast', message: $deleted
+                ? __('Guarantor removed')
+                : __('That record no longer exists — refresh the page.'));
         } catch (ValidationException $e) {
             throw $e; // field errors stay inline
         } catch (Throwable $e) {
@@ -683,8 +759,11 @@ class Show extends Component
         // from fresh state.
         $this->forgetLoan();
 
+        $loan = $this->loan()->load(['collaterals', 'guarantors']);
+
         return view('livewire.loans.show', [
-            'loan' => $this->loan()->load(['collaterals', 'guarantors']),
-        ]);
+            'loan' => $loan,
+            'overpaymentCredit' => (int) $loan->payments->whereNull('reversed_at')->sum('unallocated_minor'),
+        ])->title($loan->loan_number.' — '.$loan->borrower->fullName());
     }
 }

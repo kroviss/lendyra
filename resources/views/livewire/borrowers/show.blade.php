@@ -70,7 +70,7 @@
             <tbody>
                 @forelse ($borrower->loans->sortByDesc('id') as $loan)
                     <tr class="cursor-pointer border-t border-gray-100 hover:bg-gray-50"
-                        x-on:click="window.location = '{{ route('loans.show', $loan) }}'">
+                        x-on:click="window.location = @js(route('loans.show', $loan))">
                         <td class="px-4 py-2 font-medium">{{ $loan->loan_number }}</td>
                         <td class="px-4 py-2">{{ $loan->product?->name }}</td>
                         <td class="px-4 py-2 text-right">{{ $loan->principal()->formatted() }} {{ $loan->currency }}</td>

@@ -67,6 +67,7 @@ class AppServiceProvider extends ServiceProvider
             'reverse-payments' => ['admin', 'manager'],
             'payoff-loans' => ['admin', 'manager'],
             'write-off-loans' => ['admin', 'manager'],
+            'send-sms' => ['admin', 'manager'],
         ];
 
         foreach ($abilities as $ability => $roles) {

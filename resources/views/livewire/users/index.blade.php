@@ -5,7 +5,7 @@
             <select wire:model.live="roleFilter" class="rounded-lg border border-gray-300 bg-white py-1.5 pl-3 pr-8 text-sm shadow-sm">
                 <option value="">{{ __('All roles') }}</option>
                 @foreach (\App\Livewire\Users\Form::ROLES as $role)
-                    <option value="{{ $role }}">{{ ucwords(str_replace('_', ' ', $role)) }}</option>
+                    <option value="{{ $role }}">{{ \App\Models\User::roleLabel($role) }}</option>
                 @endforeach
             </select>
             <select wire:model.live="activeFilter" class="rounded-lg border border-gray-300 bg-white py-1.5 pl-3 pr-8 text-sm shadow-sm">

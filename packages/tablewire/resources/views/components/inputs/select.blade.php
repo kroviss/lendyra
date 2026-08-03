@@ -13,6 +13,16 @@
     $errorKey = $model ?? $name;
 
     $normalized = collect($options)->map(function ($option, $key) {
+        // Eloquent models (including aliased selects like `id as value`)
+        // and other objects must normalize like arrays — falling through
+        // to the scalar branch would render the model's JSON as the label
+        // and the collection index as the value.
+        if ($option instanceof \Illuminate\Contracts\Support\Arrayable) {
+            $option = $option->toArray();
+        } elseif (is_object($option)) {
+            $option = (array) $option;
+        }
+
         if (is_array($option)) {
             return [
                 'value' => $option['value'] ?? $option['id'] ?? null,

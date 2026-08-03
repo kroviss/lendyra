@@ -7,6 +7,7 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -17,9 +18,22 @@ class User extends Authenticatable
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
 
-    public function branch(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    public function branch(): BelongsTo
     {
         return $this->belongsTo(Branch::class);
+    }
+
+    /** Human-readable, translatable label for a role identifier. */
+    public static function roleLabel(?string $role): string
+    {
+        return match ($role) {
+            'admin' => __('Administrator'),
+            'manager' => __('Manager'),
+            'loan_officer' => __('Loan officer'),
+            'cashier' => __('Cashier'),
+            'accountant' => __('Accountant'),
+            default => ucwords(str_replace('_', ' ', (string) $role)),
+        };
     }
 
     /** Branch the current user is restricted to, or null for full visibility. */

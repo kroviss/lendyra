@@ -5,7 +5,11 @@
     </div>
 
     <div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        <form wire:submit="save" class="space-y-6">
+        <form wire:submit="save" class="space-y-6"
+            x-data="{ dirty: false }"
+            x-on:input="dirty = true"
+            x-on:submit="dirty = false"
+            x-init="window.addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } })">
             <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
                 <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <div class="md:col-span-2">
@@ -29,7 +33,8 @@
                     <x-tablewire::inputs.money label="{{ __('Amount') }}" wire:model.live.debounce.600ms="amount" required />
                     <x-tablewire::inputs.text label="{{ __('Annual rate %') }}" type="number" step="0.01" wire:model.live.debounce.600ms="annual_rate" required />
                     <x-tablewire::inputs.text label="{{ __('Term (installments)') }}" type="number" wire:model.live.debounce.600ms="term_count" required />
-                    <x-tablewire::inputs.text label="{{ __('Disbursement date') }}" type="date" wire:model.live="disbursed_at" required />
+                    <x-tablewire::inputs.text label="{{ __('Disbursement date') }}" type="date" wire:model.live="disbursed_at" required
+                        hint="{{ __('Provisional — the final schedule anchors on the day the loan is actually disbursed') }}" />
                     <x-tablewire::inputs.text label="{{ __('First due date') }}" type="date" wire:model.live="first_due_date" hint="{{ __('Optional — defaults to one period after disbursement') }}" />
                 </div>
                 <div class="mt-4">

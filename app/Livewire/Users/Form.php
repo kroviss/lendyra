@@ -159,9 +159,9 @@ class Form extends Component
     {
         return view('livewire.users.form', [
             'roleOptions' => collect(self::ROLES)->mapWithKeys(
-                fn ($role) => [$role => ucwords(str_replace('_', ' ', $role))]
+                fn ($role) => [$role => User::roleLabel($role)]
             )->all(),
             'branchOptions' => Branch::orderBy('name')->get(['id as value', 'name as label']),
-        ]);
+        ])->title($this->user?->exists ? __('Edit user') : __('New user'));
     }
 }

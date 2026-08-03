@@ -37,6 +37,7 @@ final class PayoffQuoter
         $pastDueInterest = $zero;
         $penalty = $zero;
         $current = null;
+        $futurePrepaid = 0;
 
         foreach ($dues as $due) {
             $principalOutstanding = $principalOutstanding->add($due->principalDue);
@@ -44,14 +45,21 @@ final class PayoffQuoter
 
             if ($due->dueDate <= $asOf) {
                 $pastDueInterest = $pastDueInterest->add($due->interestDue);
-            } elseif ($current === null) {
-                $current = $due;
+            } else {
+                $current ??= $due;
+
+                // Interest already collected on ANY not-yet-due period
+                // (overpayment waterfalls prepay interest across the whole
+                // loan under component-across mode) must be netted against
+                // the accrual — otherwise a payoff double-charges it.
+                $scheduled = $schedule->installments[$due->number - 1]->interest;
+                $futurePrepaid += max(0, $scheduled->minor - $due->interestDue->minor);
             }
         }
 
         $accrued = $current === null || $principalOutstanding->minor <= 0
             ? $zero
-            : self::accruedInterest($terms, $schedule, $current, $principalOutstanding, $asOf, $mode);
+            : self::accruedInterest($terms, $schedule, $current, $principalOutstanding, $asOf, $mode, $futurePrepaid);
 
         return new PayoffQuote($principalOutstanding, $pastDueInterest, $accrued, $penalty);
     }
@@ -63,9 +71,20 @@ final class PayoffQuoter
         Money $principalOutstanding,
         DateTimeImmutable $asOf,
         EarlyPayoffInterestMode $mode,
+        int $futurePrepaid = 0,
     ): Money {
         if ($mode === EarlyPayoffInterestMode::FullPeriod) {
-            return $current->interestDue;
+            // interestDue is already net of what was paid on the current
+            // period; only prepayments on periods BEYOND it still need
+            // netting out.
+            $currentScheduled = $schedule->installments[$current->number - 1]->interest;
+            $beyondPrepaid = $futurePrepaid - max(0, $currentScheduled->minor - $current->interestDue->minor);
+
+            return Money::minor(
+                max(0, $current->interestDue->minor - $beyondPrepaid),
+                $current->interestDue->currency,
+                $current->interestDue->scale,
+            );
         }
 
         $periodStart = $current->number === 1
@@ -86,15 +105,13 @@ final class PayoffQuoter
             $accrued = $principalOutstanding->multiply($terms->dailyRate() * $elapsed);
         }
 
-        // Interest the borrower already paid on the current installment
-        // (e.g. prepaid through an overpayment waterfall) must not be
-        // charged a second time: net it out, floored at zero. FullPeriod
-        // needs no netting — interestDue is already the unpaid remainder.
-        $scheduled = $schedule->installments[$current->number - 1]->interest;
-        $alreadyPaid = max(0, $scheduled->minor - $current->interestDue->minor);
-
+        // Interest the borrower already paid on the current period AND on
+        // any later period must not be charged a second time: net the
+        // whole future prepayment out, floored at zero. (If prepayments
+        // exceed the accrual, the excess stays earned — refunding it
+        // would require reclassifying income already posted.)
         return Money::minor(
-            max(0, $accrued->minor - $alreadyPaid),
+            max(0, $accrued->minor - $futurePrepaid),
             $accrued->currency,
             $accrued->scale,
         );

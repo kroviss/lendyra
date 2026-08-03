@@ -5,9 +5,12 @@ namespace TableWire\Table;
 use Illuminate\Contracts\Database\Eloquent\Builder;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
 use Livewire\WithPagination;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 abstract class BaseTable extends Component
 {
@@ -204,7 +207,7 @@ abstract class BaseTable extends Component
         }
     }
 
-    protected function sortableFields(): \Illuminate\Support\Collection
+    protected function sortableFields(): Collection
     {
         return collect($this->columns())
             ->filter(fn (Column $column) => $column->sortable)
@@ -235,7 +238,7 @@ abstract class BaseTable extends Component
         return $this->canExport();
     }
 
-    public function exportCsv(): \Symfony\Component\HttpFoundation\StreamedResponse
+    public function exportCsv(): StreamedResponse
     {
         abort_unless($this->canExport(), 403);
 
@@ -244,7 +247,7 @@ abstract class BaseTable extends Component
         $this->applySort($query);
 
         $columns = collect($this->columns())->filter(fn (Column $c) => $c->exportable)->values();
-        $filename = \Illuminate\Support\Str::kebab(class_basename(static::class) === 'Index'
+        $filename = Str::kebab(class_basename(static::class) === 'Index'
             ? class_basename(dirname(str_replace('\\', '/', static::class)))
             : class_basename(static::class)).'-'.now()->format('Ymd-His').'.csv';
 
@@ -253,7 +256,14 @@ abstract class BaseTable extends Component
             fwrite($out, "\xEF\xBB\xBF");
             fputcsv($out, $columns->map(fn (Column $c) => $c->label)->all());
 
-            $query->take($this->exportLimit())->chunk(500, function ($rows) use ($out, $columns) {
+            // Manual paging: chunk() calls forPage(), which OVERWRITES an
+            // outer take() — a plain take()->chunk() walks the whole table
+            // and the memory cap silently never applies.
+            $limit = $this->exportLimit();
+
+            for ($offset = 0; $offset < $limit; $offset += 500) {
+                $rows = (clone $query)->skip($offset)->take(min(500, $limit - $offset))->get();
+
                 foreach ($rows as $row) {
                     fputcsv($out, $columns->map(function (Column $c) use ($row) {
                         $value = $c->render($row);
@@ -264,7 +274,11 @@ abstract class BaseTable extends Component
                         return preg_match('/^[=+\-@\t\r]/', $value) ? "'".$value : $value;
                     })->all());
                 }
-            });
+
+                if ($rows->count() < 500) {
+                    break;
+                }
+            }
 
             fclose($out);
         }, $filename);

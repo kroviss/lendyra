@@ -13,6 +13,12 @@ class Index extends BaseTable
 {
     public string $statusFilter = '';
 
+    /** Same PII bar as the borrower export — cashiers cannot bulk-export. */
+    protected function canExport(): bool
+    {
+        return in_array(auth()->user()?->role, ['admin', 'manager', 'loan_officer'], true);
+    }
+
     protected function queryString(): array
     {
         return parent::queryString() + [
@@ -72,6 +78,6 @@ class Index extends BaseTable
 
     public function render(): View
     {
-        return view('livewire.collaterals.index', ['columns' => $this->columns()]);
+        return view('livewire.collaterals.index', ['columns' => $this->columns()])->title(__('Collateral'));
     }
 }

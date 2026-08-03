@@ -9,6 +9,7 @@
                 type="search"
                 wire:model.live.debounce.400ms="search"
                 placeholder="{{ __('Search...') }}"
+                aria-label="{{ __('Search') }}"
                 class="w-64 rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
             />
         </div>
@@ -102,7 +103,10 @@
                     <tr
                         wire:key="tk-row-{{ $row->getKey() }}"
                         @if ($url = $this->rowUrl($row))
-                            x-on:click="if (!$event.target.closest('a, button, input, select, textarea')) window.location = '{{ $url }}'"
+                            {{-- @js: Blade's e() entity-encodes quotes but the HTML parser
+                                 decodes them back before Alpine evaluates, so '{{ $url }}'
+                                 inside JS quotes would let an apostrophe break out. --}}
+                            x-on:click="if (!$event.target.closest('a, button, input, select, textarea')) window.location = @js($url)"
                         @endif
                         class="border-b border-gray-100 last:border-0 hover:bg-gray-50 {{ $this->rowUrl($row) ? 'cursor-pointer' : '' }}"
                     >
@@ -130,7 +134,12 @@
                 @empty
                     <tr>
                         <td colspan="{{ count($columns) + (count($this->bulkActions()) ? 1 : 0) }}" class="px-4 py-14 text-center">
-                            <p class="text-sm text-gray-400">{{ __('No records found') }}</p>
+                            @if (trim($this->search) !== '')
+                                <p class="text-sm text-gray-400">{{ __('No matches for ":search"', ['search' => $this->search]) }}</p>
+                                <button type="button" wire:click="$set('search', '')" class="mt-2 text-sm font-medium text-indigo-600 hover:text-indigo-700">{{ __('Clear search') }}</button>
+                            @else
+                                <p class="text-sm text-gray-400">{{ __('Nothing here yet') }}</p>
+                            @endif
                         </td>
                     </tr>
                 @endforelse

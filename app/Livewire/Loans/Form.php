@@ -101,7 +101,35 @@ class Form extends Component
                 },
             ],
             'loan_product_id' => 'required|exists:loan_products,id',
-            'amount' => 'required|numeric|min:0.01',
+            'amount' => [
+                'required',
+                'numeric',
+                'min:0.01',
+                // Product principal limits — configured per product but
+                // never enforced anywhere else.
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    $product = LoanProduct::find($this->loan_product_id);
+                    if ($product === null || ! is_numeric($value)) {
+                        return;
+                    }
+
+                    $minor = Money::of((string) $value, $product->currency, (int) $product->scale)->minor;
+                    $min = (int) $product->min_principal_minor;
+                    $max = (int) $product->max_principal_minor;
+
+                    if ($min > 0 && $minor < $min) {
+                        $fail(__('Amount is below this product\'s minimum of :min.', [
+                            'min' => Money::minor($min, $product->currency, (int) $product->scale)->formatted(),
+                        ]));
+                    }
+
+                    if ($max > 0 && $minor > $max) {
+                        $fail(__('Amount exceeds this product\'s maximum of :max.', [
+                            'max' => Money::minor($max, $product->currency, (int) $product->scale)->formatted(),
+                        ]));
+                    }
+                },
+            ],
             'annual_rate' => 'required|numeric|min:0|max:1000',
             'term_count' => 'required|integer|min:1|max:600',
             'disbursed_at' => 'required|date',
@@ -260,7 +288,9 @@ class Form extends Component
             }
         }
 
-        session()->flash('status', __('Loan created — review and disburse when ready'));
+        session()->flash('status', Gate::allows('activate-loans')
+            ? __('Loan created — review and disburse when ready')
+            : __('Loan submitted — a manager must approve it before disbursement'));
         $this->redirectRoute('loans.show', $loan);
     }
 
@@ -276,21 +306,38 @@ class Form extends Component
 
     public function render(): View
     {
+        // Cap the embedded option list; very large books need the
+        // async select on the roadmap, but 500 covers the target scale.
+        // Branch-scoped staff only see their own branch (+ branchless).
+        $borrowerOptions = Borrower::query()
+            ->when(auth()->user()?->scopedBranchId(), fn ($q, $branch) => $q->where(
+                fn ($b) => $b->where('branch_id', $branch)->orWhereNull('branch_id')
+            ))
+            ->orderByDesc('id')
+            ->limit(500)
+            ->get()
+            ->map(fn ($b) => ['value' => $b->id, 'label' => $b->fullName().($b->phone ? " ({$b->phone})" : '')]);
+
+        // A selected borrower older than the cap (prefill from the profile
+        // page, or an existing loan being edited) must still appear —
+        // otherwise the select silently shows its placeholder while a
+        // value is set.
+        if ($this->borrower_id !== null && ! $borrowerOptions->contains('value', $this->borrower_id)) {
+            $selected = Borrower::find($this->borrower_id);
+            if ($selected !== null) {
+                $borrowerOptions->prepend([
+                    'value' => $selected->id,
+                    'label' => $selected->fullName().($selected->phone ? " ({$selected->phone})" : ''),
+                ]);
+            }
+        }
+
         return view('livewire.loans.form', [
-            // Cap the embedded option list; very large books need the
-            // async select on the roadmap, but 500 covers the target scale.
-            // Branch-scoped staff only see their own branch (+ branchless).
-            'borrowerOptions' => Borrower::query()
-                ->when(auth()->user()?->scopedBranchId(), fn ($q, $branch) => $q->where(
-                    fn ($b) => $b->where('branch_id', $branch)->orWhereNull('branch_id')
-                ))
-                ->orderByDesc('id')
-                ->limit(500)
-                ->get()
-                ->map(fn ($b) => ['value' => $b->id, 'label' => $b->fullName().($b->phone ? " ({$b->phone})" : '')]),
+            'borrowerOptions' => $borrowerOptions,
             'productOptions' => LoanProduct::where('is_active', true)
                 ->orderBy('name')
-                ->get(['id as value', 'name as label']),
-        ]);
+                ->get()
+                ->map(fn ($p) => ['value' => $p->id, 'label' => $p->name]),
+        ])->title($this->loan?->exists ? __('Edit loan') : __('New loan'));
     }
 }

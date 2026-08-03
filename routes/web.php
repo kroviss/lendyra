@@ -11,6 +11,8 @@ use App\Livewire\Profile;
 use App\Livewire\Reports\Collections;
 use App\Livewire\Reports\Portfolio;
 use App\Livewire\Reports\TrialBalance;
+use App\Models\Borrower;
+use App\Models\Collateral;
 use App\Models\Loan;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -37,7 +39,13 @@ Route::middleware('guest')->group(function () {
     Route::post('/forgot-password', function (Request $request) {
         $request->validate(['email' => 'required|email']);
 
-        Password::sendResetLink($request->only('email'));
+        // With the log mailer the "email" would write a live tokenized
+        // reset URL into storage/logs — a plaintext account-takeover
+        // credential for anyone who can read the log. Don't mint tokens
+        // until real mail is configured.
+        if (config('mail.default') !== 'log') {
+            Password::sendResetLink($request->only('email'));
+        }
 
         // Same response either way — never confirm whether an email exists.
         return back()->with('status', __('If that email exists, a reset link has been sent.'));
@@ -65,9 +73,12 @@ Route::middleware('guest')->group(function () {
             }
         );
 
+        // One generic failure message: the broker's statuses distinguish
+        // "no such user" from "bad token", which would let an
+        // unauthenticated visitor probe which emails are registered.
         return $status === Password::PASSWORD_RESET
             ? redirect()->route('login')->with('status', __('Password reset — you can log in now.'))
-            : back()->withErrors(['email' => __($status)]);
+            : back()->withErrors(['email' => __('This password reset link is invalid or has expired.')]);
     })->middleware('throttle:5,1')->name('password.update');
 
     Route::post('/login', function (Request $request) {
@@ -128,22 +139,32 @@ Route::middleware('auth')->group(function () {
     Route::get('/collaterals', App\Livewire\Collaterals\Index::class)->name('collaterals.index');
     Route::get('/guarantors', App\Livewire\Guarantors\Index::class)->name('guarantors.index');
 
-    // Borrower/collateral photos are PII: stored on the private disk and
-    // streamed only to authenticated staff. Falls back to the legacy
-    // public location for files uploaded before the disk change.
+    // Borrower/collateral photos are PII: stored on the private disk,
+    // streamed only to authenticated staff, and branch-scoped exactly
+    // like the pages that link to them. Files no record points to are
+    // never served.
     Route::get('/media/{type}/{filename}', function (string $type, string $filename) {
         abort_unless(in_array($type, ['borrowers', 'collaterals'], true), 404);
         abort_if(str_contains($filename, '..'), 404); // no traversal
 
         $path = $type.'/'.$filename;
+        $scoped = auth()->user()?->scopedBranchId();
 
-        foreach (['local', 'public'] as $disk) {
-            if (Storage::disk($disk)->exists($path)) {
-                return Storage::disk($disk)->response($path);
-            }
+        if ($type === 'borrowers') {
+            $owner = Borrower::where('photo_path', $path)->first();
+            abort_if($owner === null, 404);
+            abort_if($scoped !== null && $owner->branch_id !== null && (int) $owner->branch_id !== $scoped, 403);
+        } else {
+            $owner = Collateral::whereJsonContains('photos', $path)->with('loan')->first();
+            abort_if($owner === null, 404);
+            abort_if($scoped !== null && $owner->loan?->branch_id !== null && (int) $owner->loan->branch_id !== $scoped, 403);
         }
 
-        abort(404);
+        abort_unless(Storage::disk('local')->exists($path), 404);
+
+        return Storage::disk('local')->response($path, headers: [
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     })->where('filename', '[A-Za-z0-9._-]+')->name('media.show');
 
     Route::get('/loans/{loan}/payments/{payment}/receipt', function (Loan $loan, int $payment) {

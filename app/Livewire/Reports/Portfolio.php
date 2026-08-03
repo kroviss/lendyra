@@ -105,6 +105,7 @@ class Portfolio extends Component
         }
 
         usort($overdueRows, fn ($a, $b) => $b['days'] <=> $a['days']);
+        $overdueTotal = count($overdueRows);
         $overdueRows = array_slice($overdueRows, 0, 200);
 
         // PAR ratio per currency: risky outstanding / total outstanding.
@@ -136,6 +137,7 @@ class Portfolio extends Component
             'par60' => $ratio($parBuckets[60]),
             'par90' => $ratio($parBuckets[90]),
             'overdueRows' => $overdueRows,
-        ]);
+            'overdueTotal' => $overdueTotal,
+        ])->title(__('Portfolio report'));
     }
 }

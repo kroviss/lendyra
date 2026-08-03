@@ -87,6 +87,7 @@ class InstallerTest extends TestCase
                     'database' => 'no_such_db_'.uniqid(),
                     'username' => 'no_such_user',
                     'password' => 'wrong',
+                    'timezone' => 'UTC',
                 ])
                 ->assertRedirect('/install/database')
                 ->assertSessionHasErrors('database');

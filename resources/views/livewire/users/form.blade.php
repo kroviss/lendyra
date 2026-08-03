@@ -24,7 +24,7 @@
 
         <div class="mt-6 flex justify-end gap-3">
             @if ($user && $user->id !== auth()->id())
-                <button type="button" wire:click="delete" wire:confirm="{{ __('Delete this user? References on historical records will be cleared.') }}"
+                <button type="button" wire:click="delete" wire:confirm="{{ __('Delete this user? Users referenced on financial records cannot be deleted — deactivate them instead.') }}"
                     class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-red-600">
                     {{ __('Delete') }}
                 </button>

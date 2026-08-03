@@ -62,7 +62,7 @@
                 <div class="flex items-center justify-between gap-2 px-2">
                     <a href="{{ route('profile') }}" class="min-w-0 rounded-md px-1 hover:bg-gray-50">
                         <p class="truncate text-sm font-medium">{{ auth()->user()?->name }}</p>
-                        <p class="truncate text-xs text-gray-400">{{ auth()->user()?->role }}</p>
+                        <p class="truncate text-xs text-gray-400">{{ \App\Models\User::roleLabel(auth()->user()?->role) }} · v{{ config('app.version') }}</p>
                     </a>
                     <form method="POST" action="{{ route('logout') }}">
                         @csrf

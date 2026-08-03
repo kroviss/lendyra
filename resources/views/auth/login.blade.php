@@ -52,9 +52,11 @@
                 {{ __('Log in') }}
             </button>
 
-            <p class="text-center">
-                <a href="{{ route('password.request') }}" class="text-sm text-gray-500 hover:text-indigo-600">{{ __('Forgot your password?') }}</a>
-            </p>
+            @if (config('mail.default') !== 'log')
+                <p class="text-center">
+                    <a href="{{ route('password.request') }}" class="text-sm text-gray-500 hover:text-indigo-600">{{ __('Forgot your password?') }}</a>
+                </p>
+            @endif
         </form>
     </div>
 </body>

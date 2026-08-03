@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 use LoanEngine\Money;
 use LoanEngine\PenaltyCalculator;
+use LoanEngine\PenaltyConfig;
 use LogicException;
 
 class PenaltyService
@@ -47,23 +48,37 @@ class PenaltyService
                 ->whereNull('settled_at')
                 ->get()
                 ->each(function (LoanInstallment $installment) use ($config, $asOf) {
-                    $accrued = PenaltyCalculator::forInstallment($installment->toDue(), $config, $asOf);
-
-                    // $accrued is the from-scratch total for ALL overdue days —
-                    // never ADD what was already paid, or every payment gets
-                    // re-billed on the next accrual. Total accrued can only
-                    // grow and never drops below what was collected.
                     $installment->update([
-                        'penalty_minor' => max(
-                            $accrued->minor,
-                            (int) $installment->penalty_minor,
-                            (int) $installment->penalty_paid_minor
-                        ),
+                        'penalty_minor' => self::netPenalty($installment, $config, $asOf),
                     ]);
                 });
         });
 
         $loan->unsetRelation('installments');
+    }
+
+    /**
+     * The penalty billed on an installment as of $asOf: the from-scratch
+     * engine total for ALL overdue days, minus everything ever waived.
+     *
+     * The ratchet against the stored value is load-bearing: the engine
+     * computes on the CURRENT unpaid base, so once principal is paid
+     * down the from-scratch figure shrinks — the ratchet is what keeps
+     * penalty that accrued on the earlier, larger base billed. Waivers
+     * survive it because waive() drops the stored value to the paid
+     * amount at the same moment it records penalty_waived_minor, so the
+     * next accrual resumes from zero outstanding instead of re-billing
+     * the forgiven amount.
+     */
+    private static function netPenalty(LoanInstallment $installment, PenaltyConfig $config, DateTimeImmutable $asOf): int
+    {
+        $accrued = PenaltyCalculator::forInstallment($installment->toDue(), $config, $asOf);
+
+        return max(
+            $accrued->minor - (int) $installment->penalty_waived_minor,
+            (int) $installment->penalty_minor,
+            (int) $installment->penalty_paid_minor
+        );
     }
 
     /**
@@ -87,12 +102,24 @@ class PenaltyService
             $installment = $installments->firstWhere('id', $installmentId)
                 ?? throw (new ModelNotFoundException)->setModel(LoanInstallment::class, [$installmentId]);
 
+            // Bring the accrual current first, so the waiver covers the
+            // penalty through today — not just through last night's cron.
+            $config = $loan->product->penaltyConfig();
+            if ($config->dailyRatePercent > 0 && $installment->settled_at === null) {
+                $installment->penalty_minor = self::netPenalty(
+                    $installment,
+                    $config,
+                    new DateTimeImmutable(today()->format('Y-m-d'))
+                );
+            }
+
             $waived = $installment->penaltyDue();
 
             if ($waived->minor <= 0) {
                 throw new LogicException(__('Nothing to waive on this installment.'));
             }
 
+            $installment->penalty_waived_minor = (int) $installment->penalty_waived_minor + $waived->minor;
             $installment->penalty_minor = (int) $installment->penalty_paid_minor;
 
             if ($installment->isSettled() && $installment->settled_at === null) {

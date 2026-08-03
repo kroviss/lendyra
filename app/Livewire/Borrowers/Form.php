@@ -96,6 +96,6 @@ class Form extends Component
 
     public function render(): View
     {
-        return view('livewire.borrowers.form');
+        return view('livewire.borrowers.form')->title($this->borrower?->exists ? __('Edit borrower') : __('New borrower'));
     }
 }

@@ -30,7 +30,9 @@
                 return Number(value).toLocaleString('en-US', { maximumFractionDigits: {{ (int) $decimals }} });
             },
             sync() {
-                const cleaned = this.display.replace(/[^0-9.\-]/g, '');
+                {{-- Money is never negative in any form here — reversals
+                     and write-offs have their own flows. --}}
+                const cleaned = this.display.replace(/[^0-9.]/g, '');
                 this.raw = cleaned === '' ? null : Number(cleaned);
             },
             init() {

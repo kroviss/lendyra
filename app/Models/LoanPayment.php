@@ -16,6 +16,7 @@ class LoanPayment extends Model
         return [
             'paid_at' => 'date',
             'reversed_at' => 'datetime',
+            'is_payoff' => 'boolean',
         ];
     }
 

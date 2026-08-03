@@ -4,10 +4,12 @@ namespace App\Livewire\Products;
 
 use App\Models\LoanProduct;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Livewire\Component;
 use LoanEngine\AccrualBasis;
 use LoanEngine\InterestMethod;
+use LoanEngine\Money;
 use LoanEngine\PenaltyBase;
 use LoanEngine\RepaymentFrequency;
 
@@ -16,17 +18,39 @@ class Form extends Component
     public ?LoanProduct $product = null;
 
     public string $name = '';
+
     public string $code = '';
+
     public string $currency = 'USD';
+
+    public string $scale = '2';
+
     public string $method = 'declining_equal_principal';
+
     public string $frequency = 'monthly';
+
     public string $basis = 'equal_periods';
+
     public string $annual_rate = '';
+
     public string $term_count = '';
+
+    public string $min_principal = '';
+
+    public string $max_principal = '';
+
+    public string $processing_fee_percent = '0';
+
+    public string $processing_fee_flat = '';
+
     public string $penalty_daily_rate = '0';
+
     public string $penalty_grace_days = '0';
+
     public string $penalty_base = 'overdue_principal';
+
     public string $penalty_cap_percent = '';
+
     public bool $is_active = true;
 
     public function mount(?int $product = null): void
@@ -37,11 +61,22 @@ class Form extends Component
             $this->name = $this->product->name;
             $this->code = $this->product->code;
             $this->currency = $this->product->currency;
+            $this->scale = (string) $this->product->scale;
             $this->method = $this->product->method->value;
             $this->frequency = $this->product->frequency->value;
             $this->basis = $this->product->basis->value;
             $this->annual_rate = (string) $this->product->annual_rate;
             $this->term_count = (string) $this->product->term_count;
+            $this->min_principal = $this->product->min_principal_minor !== null
+                ? Money::minor((int) $this->product->min_principal_minor, $this->product->currency, (int) $this->product->scale)->toDecimalString()
+                : '';
+            $this->max_principal = $this->product->max_principal_minor !== null
+                ? Money::minor((int) $this->product->max_principal_minor, $this->product->currency, (int) $this->product->scale)->toDecimalString()
+                : '';
+            $this->processing_fee_percent = (string) $this->product->processing_fee_percent;
+            $this->processing_fee_flat = (int) $this->product->processing_fee_flat_minor > 0
+                ? Money::minor((int) $this->product->processing_fee_flat_minor, $this->product->currency, (int) $this->product->scale)->toDecimalString()
+                : '';
             $this->penalty_daily_rate = (string) $this->product->penalty_daily_rate;
             $this->penalty_grace_days = (string) $this->product->penalty_grace_days;
             $this->penalty_base = $this->product->penalty_base->value;
@@ -59,11 +94,34 @@ class Form extends Component
                 Rule::unique('loan_products', 'code')->ignore($this->product?->id),
             ],
             'currency' => 'required|size:3|alpha',
+            'scale' => [
+                'required', 'integer', 'min:0', 'max:6',
+                // Aggregates (trial balance, dashboards) group by bare
+                // currency, so two products sharing a currency must agree
+                // on its minor-unit scale.
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    $conflict = LoanProduct::where('currency', strtoupper($this->currency))
+                        ->when($this->product, fn ($q) => $q->whereKeyNot($this->product->id))
+                        ->where('scale', '!=', (int) $value)
+                        ->value('scale');
+
+                    if ($conflict !== null) {
+                        $fail(__('Other :currency products use :scale decimal places — a currency must use one scale everywhere.', [
+                            'currency' => strtoupper($this->currency),
+                            'scale' => $conflict,
+                        ]));
+                    }
+                },
+            ],
             'method' => Rule::enum(InterestMethod::class),
             'frequency' => Rule::enum(RepaymentFrequency::class),
             'basis' => Rule::enum(AccrualBasis::class),
             'annual_rate' => 'required|numeric|min:0|max:1000',
             'term_count' => 'required|integer|min:1|max:600',
+            'min_principal' => 'nullable|numeric|min:0',
+            'max_principal' => 'nullable|numeric|min:0|gte:min_principal',
+            'processing_fee_percent' => 'required|numeric|min:0|max:100',
+            'processing_fee_flat' => 'nullable|numeric|min:0',
             'penalty_daily_rate' => 'required|numeric|min:0|max:100',
             'penalty_grace_days' => 'required|integer|min:0|max:365',
             'penalty_base' => Rule::enum(PenaltyBase::class),
@@ -74,11 +132,28 @@ class Form extends Component
 
     public function save(): void
     {
-        \Illuminate\Support\Facades\Gate::authorize('manage-products');
+        Gate::authorize('manage-products');
 
         $data = $this->validate();
         $data['currency'] = strtoupper($data['currency']);
         $data['penalty_cap_percent'] = $data['penalty_cap_percent'] === '' ? null : $data['penalty_cap_percent'];
+
+        // Changing the scale after loans exist would reinterpret every
+        // stored minor amount (100 cents ≠ 100 fils) — lock it.
+        if ($this->product
+            && (int) $data['scale'] !== (int) $this->product->scale
+            && $this->product->loans()->withTrashed()->exists()) {
+            $this->addError('scale', __('Scale cannot change once loans exist for this product.'));
+
+            return;
+        }
+
+        $toMinor = fn (string $decimal): int => Money::of($decimal, $data['currency'], (int) $data['scale'])->minor;
+
+        $data['min_principal_minor'] = $data['min_principal'] === '' ? null : $toMinor($data['min_principal']);
+        $data['max_principal_minor'] = $data['max_principal'] === '' ? null : $toMinor($data['max_principal']);
+        $data['processing_fee_flat_minor'] = $data['processing_fee_flat'] === '' ? 0 : $toMinor($data['processing_fee_flat']);
+        unset($data['min_principal'], $data['max_principal'], $data['processing_fee_flat']);
 
         // Annuity math is only defined for equal periods — force-correct
         // the basis rather than persist an impossible combination.
@@ -104,7 +179,7 @@ class Form extends Component
             return;
         }
 
-        \Illuminate\Support\Facades\Gate::authorize('manage-products');
+        Gate::authorize('manage-products');
 
         if (! $this->product) {
             return;
@@ -126,13 +201,13 @@ class Form extends Component
     {
         return view('livewire.products.form', [
             'methodOptions' => collect(InterestMethod::cases())
-                ->map(fn ($c) => ['value' => $c->value, 'label' => ucwords(str_replace('_', ' ', $c->value))]),
+                ->map(fn ($c) => ['value' => $c->value, 'label' => $c->label()]),
             'frequencyOptions' => collect(RepaymentFrequency::cases())
-                ->map(fn ($c) => ['value' => $c->value, 'label' => ucfirst($c->value)]),
+                ->map(fn ($c) => ['value' => $c->value, 'label' => $c->label()]),
             'basisOptions' => collect(AccrualBasis::cases())
-                ->map(fn ($c) => ['value' => $c->value, 'label' => ucwords(str_replace('_', ' ', $c->value))]),
+                ->map(fn ($c) => ['value' => $c->value, 'label' => $c->label()]),
             'penaltyBaseOptions' => collect(PenaltyBase::cases())
-                ->map(fn ($c) => ['value' => $c->value, 'label' => ucwords(str_replace('_', ' ', $c->value))]),
-        ]);
+                ->map(fn ($c) => ['value' => $c->value, 'label' => $c->label()]),
+        ])->title($this->product ? __('Edit product') : __('New product'));
     }
 }

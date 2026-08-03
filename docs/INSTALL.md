@@ -59,6 +59,20 @@ $app = require_once __DIR__.'/../lendyra/bootstrap/app.php';
 `public_html`.) The `storage:link` symlink must then point from
 `public_html/storage` to `~/lendyra/storage/app/public`.
 
+Either way the app must answer at the **domain root or a subdomain**
+(`https://loans.example.com`). Serving it from a URL subdirectory
+(`https://example.com/lendyra/`) is not supported — the installer writes
+`APP_URL` without a path.
+
+## Timezone
+
+The installer asks for your timezone and writes it to `APP_TIMEZONE` in
+`.env` (default `UTC`). Due dates, "overdue" day boundaries, penalty
+accrual (00:30) and SMS reminders (09:00) all run in **this app timezone**,
+not the server's. If you skipped it or need to change it later, edit
+`APP_TIMEZONE` in `.env` — use a PHP timezone identifier such as
+`Africa/Nairobi` or `Asia/Manila`.
+
 ## Cron
 
 The scheduler drives daily penalty accrual, SMS payment reminders and (only
@@ -97,7 +111,9 @@ LMS_SMS_REMINDER_DAYS=3   # days before the due date for the "upcoming" reminder
 ```
 
 - `log` (default) writes each message to `storage/logs/laravel.log` — safe
-  for testing, nothing is actually sent.
+  for testing, nothing is actually sent. Note the log then contains borrower
+  phone numbers; switch to the `http` driver (or protect the log directory)
+  before production use.
 - `http` POSTs JSON `{"to": "<phone>", "message": "<text>"}` to
   `LMS_SMS_HTTP_URL` (10-second timeout). If `LMS_SMS_HTTP_TOKEN` is set it
   is sent as an `Authorization: Bearer` header. Any 2xx response counts as
@@ -121,9 +137,12 @@ running a public demo — never enable it in production.
 
 "Forgot password" emails use Laravel's mail system. Set the `MAIL_*`
 variables in `.env` (SMTP host, port, username, password, from address).
-With the default `MAIL_MAILER=log`, reset links are written to
-`storage/logs/laravel.log` instead of being sent — fine for testing,
-not for production.
+
+While the mailer is still the default `MAIL_MAILER=log`, the
+"Forgot your password?" link is hidden and no reset tokens are minted —
+a reset link in a log file is a plaintext account-takeover credential for
+anyone who can read it. Configure real mail to enable self-service resets;
+until then an admin can change passwords from the Users page.
 
 ## Running behind a reverse proxy / load balancer
 
@@ -146,6 +165,9 @@ Copy `lang/en.json` to `lang/<locale>.json`, translate the values, and set
 `APP_LOCALE=<locale>` in `.env`.
 
 ## Upgrading
+
+Your installed version is shown at the bottom of the sidebar (e.g. v1.0.2);
+changes per release are in `CHANGELOG.md`.
 
 1. Back up your database and `.env`.
 2. Replace application files (keep `.env`, `storage/`, `public/uploads` if any).

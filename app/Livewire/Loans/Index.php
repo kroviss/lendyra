@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Loans;
 
+use App\Enums\LoanStatus;
 use App\Models\Loan;
 use Illuminate\Contracts\Database\Eloquent\Builder;
 use Illuminate\Contracts\View\View;
@@ -31,7 +32,7 @@ class Index extends BaseTable
             ->with(['borrower', 'product'])
             ->when(auth()->user()?->scopedBranchId(), fn (Builder $q, int $branch) => $q->where(fn ($b) => $b->where('branch_id', $branch)->orWhereNull('branch_id')))
             ->when($this->statusFilter === 'overdue', fn (Builder $q) => $q
-                ->where('status', \App\Enums\LoanStatus::Active)
+                ->where('status', LoanStatus::Active)
                 ->whereHas('installments', fn ($i) => $i->whereNull('settled_at')->where('due_date', '<', today())))
             ->when($this->statusFilter !== '' && $this->statusFilter !== 'overdue',
                 fn (Builder $q) => $q->where('status', $this->statusFilter));
@@ -75,6 +76,6 @@ class Index extends BaseTable
 
     public function render(): View
     {
-        return view('livewire.loans.index', ['columns' => $this->columns()]);
+        return view('livewire.loans.index', ['columns' => $this->columns()])->title(__('Loans'));
     }
 }

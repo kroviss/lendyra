@@ -49,7 +49,7 @@ class TrialBalance extends Component
                     'type' => $account->type,
                     'debits' => $scales->money($debits, $line->currency)->formatted(),
                     'credits' => $scales->money($credits, $line->currency)->formatted(),
-                    'balance' => $scales->money(abs($net), $line->currency)->formatted().($net < 0 ? ' Cr' : ($net > 0 ? ' Dr' : '')),
+                    'balance' => $scales->money(abs($net), $line->currency)->formatted().($net < 0 ? ' '.__('Cr') : ($net > 0 ? ' '.__('Dr') : '')),
                 ];
             }
         }
@@ -71,6 +71,6 @@ class TrialBalance extends Component
             'totalDebits' => $currencyTotals->isEmpty() ? '0.00' : $format('debits'),
             'totalCredits' => $currencyTotals->isEmpty() ? '0.00' : $format('credits'),
             'balanced' => $balanced,
-        ]);
+        ])->title(__('Trial balance'));
     }
 }

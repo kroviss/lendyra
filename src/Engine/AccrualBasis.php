@@ -23,4 +23,19 @@ enum AccrualBasis: string
             self::Actual360 => 360,
         };
     }
+
+    public function label(): string
+    {
+        $labels = [
+            'equal_periods' => 'Equal periods',
+            'actual_365' => 'Actual / 365',
+            'actual_360' => 'Actual / 360',
+        ];
+
+        // Stay framework-agnostic: translate only when a real
+        // translator is bound.
+        return function_exists('app') && app()->bound('translator')
+            ? __($labels[$this->value])
+            : $labels[$this->value];
+    }
 }

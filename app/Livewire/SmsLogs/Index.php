@@ -3,14 +3,19 @@
 namespace App\Livewire\SmsLogs;
 
 use App\Models\SmsLog;
+use App\Services\Sms\SmsFactory;
 use Illuminate\Contracts\Database\Eloquent\Builder;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
 use TableWire\Table\BaseTable;
 use TableWire\Table\Column;
 
 class Index extends BaseTable
 {
     public string $kindFilter = '';
+
     public string $statusFilter = '';
 
     protected function queryString(): array
@@ -44,7 +49,12 @@ class Index extends BaseTable
 
     public function resend(int $logId): void
     {
-        if (! \Illuminate\Support\Facades\RateLimiter::attempt('sms-resend:'.auth()->id(), 10, fn () => true, 60)) {
+        // In-method backstop: the route's role middleware is the primary
+        // gate, but this action spends gateway credits — never rely on
+        // routing alone.
+        Gate::authorize('send-sms');
+
+        if (! RateLimiter::attempt('sms-resend:'.auth()->id(), 10, fn () => true, 60)) {
             $this->dispatch('toast', message: __('Too many resends — try again in a minute.'));
 
             return;
@@ -52,7 +62,7 @@ class Index extends BaseTable
 
         $log = SmsLog::findOrFail($logId);
 
-        $ok = \App\Services\Sms\SmsFactory::make()->send($log->to, $log->message);
+        $ok = SmsFactory::make()->send($log->to, $log->message);
 
         $log->update(['status' => $ok ? 'sent' : 'failed']);
 
@@ -64,14 +74,16 @@ class Index extends BaseTable
         return [
             Column::make('created_at', __('Sent at'))->date('Y-m-d H:i')->sortable(),
             Column::make('to', __('To'))->searchable(),
-            Column::make('kind', __('Type'))->center()->badge([
-                'upcoming' => 'bg-blue-100 text-blue-700',
-                'overdue' => 'bg-red-100 text-red-700',
-            ]),
+            Column::make('kind', __('Type'))->center()->format(
+                fn ($value) => '<span class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium '
+                    .($value === 'upcoming' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700').'">'
+                    .e($value === 'upcoming' ? __('Upcoming') : __('Overdue')).'</span>',
+                html: true
+            ),
             Column::make('installment.loan.loan_number', __('Loan #')),
             Column::make('message', __('Message'))
                 ->searchable()
-                ->format(fn ($value) => \Illuminate\Support\Str::limit($value, 80)),
+                ->format(fn ($value) => Str::limit($value, 80)),
             Column::make('status', __('Status'))->center()->badge([
                 'sent' => 'bg-green-100 text-green-700',
                 'failed' => 'bg-red-100 text-red-700',
@@ -94,6 +106,6 @@ class Index extends BaseTable
 
     public function render(): View
     {
-        return view('livewire.sms-logs.index', ['columns' => $this->columns()]);
+        return view('livewire.sms-logs.index', ['columns' => $this->columns()])->title(__('SMS logs'));
     }
 }

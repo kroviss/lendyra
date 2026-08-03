@@ -28,6 +28,7 @@ class RepaymentService
         string $method = 'cash',
         ?string $reference = null,
         ?int $receivedBy = null,
+        bool $isPayoff = false,
     ): LoanPayment {
         if (! $loan->status->acceptsPayments()) {
             throw new LogicException("Loan {$loan->loan_number} is {$loan->status->value} and cannot accept payments.");
@@ -39,7 +40,7 @@ class RepaymentService
             throw new InvalidArgumentException("Payment currency {$amount->currency} does not match loan currency {$loan->currency}.");
         }
 
-        return DB::transaction(function () use ($loan, $amount, $paidAt, $method, $reference, $receivedBy) {
+        return DB::transaction(function () use ($loan, $amount, $paidAt, $method, $reference, $receivedBy, $isPayoff) {
             // Re-read the loan under lock: a concurrent request may have
             // just closed or written it off.
             $loan = Loan::lockForUpdate()->findOrFail($loan->id);
@@ -72,6 +73,7 @@ class RepaymentService
                 'paid_at' => $paidAt->format('Y-m-d'),
                 'method' => $method,
                 'reference' => $reference,
+                'is_payoff' => $isPayoff,
                 'received_by' => $receivedBy,
             ]);
 
@@ -182,8 +184,10 @@ class RepaymentService
             // A payoff settlement rewrote interest_minor to waive future
             // interest; reversing it must restore the contractual schedule.
             // The engine is deterministic, so the original numbers come
-            // straight back from a preview.
-            if ($payment->reference === 'payoff') {
+            // straight back from a preview. (Flag column, NOT the free-text
+            // reference — a cashier typing "payoff" on an ordinary payment
+            // must not trigger a schedule restore on reversal.)
+            if ($payment->is_payoff) {
                 $schedule = app(LoanScheduleService::class)->preview($loan);
 
                 foreach ($schedule->installments as $engineInstallment) {
