@@ -22,6 +22,7 @@ rsync -a "$ROOT/" "$STAGE/" \
     --exclude .phpunit.result.cache \
     --exclude 'docs/PLAN.md' \
     --exclude 'docs/MARKETING.md' \
+    --exclude 'docs/LISTING.md' \
     --exclude 'database/*.sqlite' \
     --exclude 'storage/app/installed.lock' \
     --exclude 'storage/logs/*.log' \

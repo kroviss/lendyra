@@ -161,8 +161,24 @@ Users without a branch are not restricted.
 
 ## Translation
 
-Copy `lang/en.json` to `lang/<locale>.json`, translate the values, and set
-`APP_LOCALE=<locale>` in `.env`.
+English, French, Spanish and Portuguese ship in the box: set
+`APP_LOCALE=fr` (or `es`, `pt`) in `.env`. For any other language, copy
+`lang/en.json` to `lang/<locale>.json`, translate the values, and set
+`APP_LOCALE=<locale>`.
+
+## Backups
+
+Everything that matters lives in two places:
+
+- **The database** — schedule a daily dump, e.g.
+  `mysqldump -u USER -p DBNAME | gzip > backup-$(date +%F).sql.gz`
+  (or use your hosting panel's backup tool).
+- **`storage/app/private/`** — borrower and collateral photos.
+
+Also keep a copy of your `.env` (it holds the APP_KEY; without it,
+encrypted values such as remembered sessions are lost). Restoring is:
+fresh files → restore `.env` → restore DB → restore photos →
+`php artisan optimize:clear`.
 
 ## Upgrading
 

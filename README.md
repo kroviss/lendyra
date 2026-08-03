@@ -27,8 +27,8 @@ with per-product engine config · Live schedule preview while creating a
 loan · Disbursement workflow · Payment recording with waterfall breakdown ·
 Early payoff with live quote · Printable statements · Branch + role support
 (admin / manager / loan_officer / cashier / accountant) · Dashboard ·
-Portfolio report · Daily penalty cron · Web installer · Translatable
-(all strings in `lang/en.json`)
+Portfolio report · Daily penalty cron · Web installer · Translatable —
+English, French, Spanish and Portuguese included (`lang/*.json`)
 
 ## Requirements
 
