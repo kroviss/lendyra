@@ -161,10 +161,11 @@ Users without a branch are not restricted.
 
 ## Translation
 
-English, French, Spanish and Portuguese ship in the box: set
-`APP_LOCALE=fr` (or `es`, `pt`) in `.env`. For any other language, copy
-`lang/en.json` to `lang/<locale>.json`, translate the values, and set
-`APP_LOCALE=<locale>`.
+English, French, Spanish and Portuguese ship in the box. `APP_LOCALE` in
+`.env` sets the default; each user can also switch languages from the
+selector in the top-right corner (stored per session). For any other
+language, copy `lang/en.json` to `lang/<locale>.json` and translate the
+values — it appears in the selector automatically.
 
 ## Backups
 

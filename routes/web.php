@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\InstallController;
+use App\Http\Middleware\SetLocale;
 use App\Livewire\Borrowers;
 use App\Livewire\Branches\Form;
 use App\Livewire\Branches\Index;
@@ -30,6 +31,16 @@ Route::prefix('install')->middleware('throttle:20,1')->controller(InstallControl
     Route::get('/admin', 'admin')->name('install.admin');
     Route::post('/admin', 'saveAdmin')->name('install.admin.save');
 });
+
+// Language switcher — available to guests too (login page, demo visitors).
+Route::post('/locale', function (Request $request) {
+    $request->validate(['locale' => 'required|string|max:8']);
+    abort_unless(array_key_exists($request->locale, SetLocale::available()), 422);
+
+    $request->session()->put('locale', $request->locale);
+
+    return back();
+})->name('locale.switch');
 
 Route::middleware('guest')->group(function () {
     Route::get('/login', fn () => view('auth.login'))->name('login');

@@ -7,6 +7,9 @@
     @vite(['resources/css/app.css'])
 </head>
 <body class="flex min-h-screen items-center justify-center bg-gray-100 font-sans antialiased">
+    <div class="fixed right-4 top-4">
+        <x-locale-switcher />
+    </div>
     <div class="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
         <div class="mb-6 flex items-center gap-2">
             <div class="flex size-9 items-center justify-center rounded-lg bg-indigo-600 font-bold text-white">L</div>

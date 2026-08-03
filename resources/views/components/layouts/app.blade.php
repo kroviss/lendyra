@@ -14,6 +14,7 @@
                 <svg class="size-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg>
             </button>
             <a href="{{ route('dashboard') }}" class="font-semibold">{{ config('app.name') }}</a>
+            <x-locale-switcher class="ml-auto" />
         </div>
 
         {{-- Mobile overlay --}}
@@ -79,7 +80,10 @@
         </aside>
 
         {{-- Main --}}
-        <main class="flex-1 p-4 pt-20 lg:ml-60 lg:p-8 lg:pt-8">
+        <main class="flex-1 p-4 pt-20 lg:ml-60 lg:p-8 lg:pt-6">
+            <div class="mb-3 hidden justify-end lg:flex">
+                <x-locale-switcher />
+            </div>
             @if (config('lms.demo'))
                 <div class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
                     {{ __('Demo mode — data resets nightly; account changes are disabled.') }}
