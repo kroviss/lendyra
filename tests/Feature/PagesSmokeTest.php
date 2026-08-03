@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Enums\LoanStatus;
 use App\Models\Borrower;
+use App\Models\Branch;
 use App\Models\Loan;
 use App\Models\LoanProduct;
 use App\Models\User;
@@ -59,6 +60,35 @@ class PagesSmokeTest extends TestCase
         $this->get('/products/create')->assertOk();
         $this->get('/loans')->assertOk();
         $this->get('/loans/create')->assertOk();
+    }
+
+    /**
+     * Edit pages go through Livewire's route-model binding (typed public
+     * property ← {param}); Livewire tests that set properties directly
+     * never exercise it, so every edit URL gets a real HTTP hit here.
+     */
+    public function test_edit_pages_render_over_http(): void
+    {
+        $this->actingAs($this->user);
+
+        $product = LoanProduct::create([
+            'name' => 'Edit Smoke', 'code' => 'EDT-'.uniqid(),
+            'annual_rate' => 12.0, 'term_count' => 6, 'penalty_daily_rate' => 0,
+        ]);
+        $borrower = Borrower::create([
+            'first_name' => 'Edit', 'last_name' => 'Smoke',
+            'phone' => '+1'.random_int(1000000000, 9999999999),
+        ]);
+        $branch = Branch::create(['name' => 'Edit Smoke', 'code' => 'ES-'.substr(uniqid(), -8)]);
+        $other = User::create([
+            'name' => 'Edit Smoke', 'email' => 'edit-'.uniqid().'@example.com',
+            'password' => bcrypt('secret123'), 'role' => 'cashier',
+        ]);
+
+        $this->get("/products/{$product->id}/edit")->assertOk();
+        $this->get("/borrowers/{$borrower->id}/edit")->assertOk();
+        $this->get("/branches/{$branch->id}/edit")->assertOk();
+        $this->get("/users/{$other->id}/edit")->assertOk();
     }
 
     public function test_loan_show_page_renders_with_schedule(): void

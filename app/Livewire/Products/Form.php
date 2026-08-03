@@ -53,10 +53,12 @@ class Form extends Component
 
     public bool $is_active = true;
 
-    public function mount(?int $product = null): void
+    // Livewire binds the {product} route parameter to the typed public
+    // property as a model — accept both shapes like Users\Form does.
+    public function mount(LoanProduct|int|null $product = null): void
     {
         if ($product !== null) {
-            $this->product = LoanProduct::findOrFail($product);
+            $this->product = $product instanceof LoanProduct ? $product : LoanProduct::findOrFail($product);
 
             $this->name = $this->product->name;
             $this->code = $this->product->code;
