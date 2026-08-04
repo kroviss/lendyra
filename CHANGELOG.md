@@ -5,6 +5,12 @@ All notable changes to Lendyra are documented here.
 ## 1.0.3 — 2026-08-04
 
 ### Fixed
+- Branch-scoped users no longer see out-of-branch loans on a borrower's
+  profile page or in the borrower list's loan counts — the profile's
+  eager-loaded loans are now scoped like every other loan surface.
+- The `/media` collateral photo route no longer fails open when the owning
+  loan is soft-deleted; a missing loan is treated as denied for scoped users
+  instead of served to anyone.
 - **Backdated payments no longer swallow penalty that accrued after the payment
   date.** Penalty is now recomputed from the dated payment history (segment by
   segment on the principal actually outstanding), so a bank transfer that

@@ -166,9 +166,17 @@ Route::middleware('auth')->group(function () {
             abort_if($owner === null, 404);
             abort_if($scoped !== null && $owner->branch_id !== null && (int) $owner->branch_id !== $scoped, 403);
         } else {
-            $owner = Collateral::whereJsonContains('photos', $path)->with('loan')->first();
+            // withTrashed: a soft-deleted loan must not turn the branch guard
+            // into a fail-open (null loan short-circuiting the check).
+            $owner = Collateral::whereJsonContains('photos', $path)
+                ->with(['loan' => fn ($q) => $q->withTrashed()])
+                ->first();
             abort_if($owner === null, 404);
-            abort_if($scoped !== null && $owner->loan?->branch_id !== null && (int) $owner->loan->branch_id !== $scoped, 403);
+            $loanBranch = $owner->loan?->branch_id;
+            abort_if(
+                $scoped !== null && ($owner->loan === null || ($loanBranch !== null && (int) $loanBranch !== $scoped)),
+                403
+            );
         }
 
         abort_unless(Storage::disk('local')->exists($path), 404);

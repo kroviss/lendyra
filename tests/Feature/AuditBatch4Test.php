@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Enums\LoanStatus;
+use App\Livewire\Borrowers\Show as BorrowerShow;
 use App\Livewire\Loans\Form as LoanForm;
 use App\Livewire\Loans\Show;
 use App\Livewire\Reports\Collections;
@@ -309,5 +310,68 @@ class AuditBatch4Test extends TestCase
             ->assertSet('actionError', null);
 
         $this->assertSame(LoanStatus::Active, $ok->fresh()->status);
+    }
+
+    /** Pass-8 F1: the borrower profile must not leak out-of-branch loans (eager-load scope). */
+    public function test_borrower_profile_hides_out_of_branch_loans(): void
+    {
+        config(['lms.branch_scoping' => true]);
+
+        $branchA = $this->makeBranch();
+        $branchB = $this->makeBranch();
+        $cashier = $this->makeUser('cashier', branchId: $branchB->id);
+
+        // A borrower reachable from branch B (null branch), carrying a loan booked into branch A.
+        $borrower = Borrower::create([
+            'first_name' => 'Cross', 'last_name' => 'Branch',
+            'phone' => '+1'.random_int(1000000000, 9999999999), 'branch_id' => null,
+        ]);
+        $product = LoanProduct::create(['name' => 'P8', 'code' => 'P8-'.uniqid(), 'annual_rate' => 12.0, 'term_count' => 6])->refresh();
+        $secretLoan = Loan::create([
+            'loan_number' => 'SECRET-BRANCH-A-9931',
+            'borrower_id' => $borrower->id, 'loan_product_id' => $product->id,
+            'currency' => 'USD', 'scale' => 2, 'principal_minor' => Money::of('6000.00')->minor,
+            'annual_rate' => 12.0, 'term_count' => 6, 'method' => $product->method->value,
+            'frequency' => 'monthly', 'basis' => 'equal_periods',
+            'disbursed_at' => '2026-01-15', 'status' => LoanStatus::Active,
+            'branch_id' => $branchA->id,
+        ]);
+
+        // Profile is reachable (borrower is in-scope) but the branch-A loan is invisible.
+        Livewire::actingAs($cashier)
+            ->test(BorrowerShow::class, ['borrower' => $borrower->id])
+            ->assertOk()
+            ->assertDontSee('SECRET-BRANCH-A-9931');
+
+        // The direct loan page still refuses it.
+        $this->actingAs($cashier)->get('/loans/'.$secretLoan->id)->assertForbidden();
+    }
+
+    /** Pass-8 F2: a soft-deleted loan must not turn the /media branch guard into a fail-open. */
+    public function test_media_route_stays_closed_when_owning_loan_is_soft_deleted(): void
+    {
+        config(['lms.branch_scoping' => true]);
+
+        $branchA = $this->makeBranch();
+        $branchB = $this->makeBranch();
+        $outsider = $this->makeUser('cashier', branchId: $branchB->id);
+
+        $loan = $this->makeLoan(status: LoanStatus::Active, disbursedAt: '2026-01-15');
+        $loan->update(['branch_id' => $branchA->id]);
+
+        $path = 'collaterals/'.str_repeat('a', 40).'.jpg';
+        Storage::disk('local')->put($path, 'x');
+        $loan->collaterals()->create([
+            'type' => 'Gold', 'estimated_value_minor' => 100000, 'photos' => [$path],
+        ]);
+
+        // Out-of-branch while the loan is live: denied.
+        $this->actingAs($outsider)->get('/media/collaterals/'.basename($path))->assertForbidden();
+
+        // Soft-delete the loan: the guard must stay closed, not fail open.
+        $loan->delete();
+        $this->actingAs($outsider)->get('/media/collaterals/'.basename($path))->assertForbidden();
+
+        Storage::disk('local')->delete($path);
     }
 }

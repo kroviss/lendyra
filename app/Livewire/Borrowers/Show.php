@@ -51,10 +51,22 @@ class Show extends Component
 
     public function render(): View
     {
-        $borrower = Borrower::with(['loans.product', 'loans.installments'])
-            ->findOrFail($this->borrowerId);
-
         $scoped = auth()->user()?->scopedBranchId();
+
+        // Scope the eager-loaded loans the same way every other loan surface
+        // does: a branch-scoped user must not see out-of-branch loans on a
+        // borrower profile they can otherwise reach.
+        $scopeLoans = fn ($q) => $q->when(
+            $scoped,
+            fn ($qq, $branch) => $qq->where(fn ($b) => $b->where('branch_id', $branch)->orWhereNull('branch_id'))
+        );
+
+        $borrower = Borrower::with([
+            'loans' => $scopeLoans,
+            'loans.product',
+            'loans.installments',
+        ])->findOrFail($this->borrowerId);
+
         abort_if($scoped !== null && $borrower->branch_id !== null && (int) $borrower->branch_id !== $scoped, 403);
 
         $outstanding = [];
