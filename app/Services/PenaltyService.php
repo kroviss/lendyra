@@ -5,10 +5,14 @@ namespace App\Services;
 use App\Enums\LoanStatus;
 use App\Models\Loan;
 use App\Models\LoanInstallment;
+use App\Models\LoanPaymentAllocation;
 use DateTimeImmutable;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
+use LoanEngine\AllocationComponent;
+use LoanEngine\BaseReduction;
 use LoanEngine\Money;
+use LoanEngine\PenaltyBase;
 use LoanEngine\PenaltyCalculator;
 use LoanEngine\PenaltyConfig;
 use LogicException;
@@ -16,11 +20,13 @@ use LogicException;
 class PenaltyService
 {
     /**
-     * Recompute accrued penalties for every overdue, unsettled
-     * installment as of $asOf. Always computed from scratch on the
-     * CURRENT unpaid base and stored as a replacement — running this
-     * any number of times for the same date changes nothing
-     * (idempotent), and it never drops below what was already paid.
+     * Recompute accrued penalties for every unsettled installment as of
+     * $asOf. The figure is a pure function of (schedule, dated payment
+     * history, waivers, $asOf) — see netPenalty() — and is stored as a
+     * REPLACEMENT: running this any number of times for the same date
+     * changes nothing (idempotent), a backdated effective date brings
+     * the figure back DOWN to what it was on that date, and it never
+     * drops below what was already paid.
      */
     public function accrue(Loan $loan, DateTimeImmutable $asOf): void
     {
@@ -42,9 +48,13 @@ class PenaltyService
                 return;
             }
 
+            // Rows due before $asOf accrue; rows already CARRYING a
+            // penalty are included too, so a payment backdated to (or
+            // before) the due date can pull a stale cron-written figure
+            // back down to zero instead of leaving it billed.
             $locked->installments()
                 ->lockForUpdate()
-                ->where('due_date', '<', $cutoff)
+                ->where(fn ($q) => $q->where('due_date', '<', $cutoff)->orWhere('penalty_minor', '>', 0))
                 ->whereNull('settled_at')
                 ->get()
                 ->each(function (LoanInstallment $installment) use ($config, $asOf) {
@@ -58,27 +68,84 @@ class PenaltyService
     }
 
     /**
-     * The penalty billed on an installment as of $asOf: the from-scratch
-     * engine total for ALL overdue days, minus everything ever waived.
+     * The penalty billed on an installment as of $asOf: the engine's
+     * segment-by-segment total over the dated payment history (penalty
+     * accrued on the base outstanding DURING each stretch of overdue
+     * days), minus everything ever waived.
      *
-     * The ratchet against the stored value is load-bearing: the engine
-     * computes on the CURRENT unpaid base, so once principal is paid
-     * down the from-scratch figure shrinks — the ratchet is what keeps
-     * penalty that accrued on the earlier, larger base billed. Waivers
-     * survive it because waive() drops the stored value to the paid
-     * amount at the same moment it records penalty_waived_minor, so the
-     * next accrual resumes from zero outstanding instead of re-billing
-     * the forgiven amount.
+     * This is a pure function of (schedule, payment history, waivers,
+     * $asOf), never a ratchet against the stored value — so a payment
+     * backdated to the due date zeroes the penalty entirely, and a
+     * partial payment keeps everything accrued on the old, larger base
+     * while accrual continues on the reduced one.
+     *
+     * The only clamp: the figure never drops below what was already
+     * PAID. When a backdated payment makes an earlier penalty charge
+     * moot we keep the collected amount rather than refunding it —
+     * clamping to paid keeps penaltyDue() at zero (never negative), so
+     * the allocator and the ledger stay consistent. Waivers survive
+     * because waive() records penalty_waived_minor at the same moment
+     * it drops the stored value to the paid amount, so later accruals
+     * bill only days after the waiver instead of re-billing the
+     * forgiven amount.
      */
     private static function netPenalty(LoanInstallment $installment, PenaltyConfig $config, DateTimeImmutable $asOf): int
     {
-        $accrued = PenaltyCalculator::forInstallment($installment->toDue(), $config, $asOf);
+        $loan = $installment->loan;
+
+        $scheduledBase = Money::minor(
+            (int) $installment->principal_minor
+                + ($config->base === PenaltyBase::OverdueInstallment ? (int) $installment->interest_minor : 0),
+            $loan->currency,
+            (int) $loan->scale
+        );
+
+        $accrued = PenaltyCalculator::accruedWithHistory(
+            new DateTimeImmutable($installment->due_date->format('Y-m-d')),
+            $scheduledBase,
+            self::baseReductions($installment, $config),
+            $config,
+            $asOf,
+        );
 
         return max(
             $accrued->minor - (int) $installment->penalty_waived_minor,
-            (int) $installment->penalty_minor,
             (int) $installment->penalty_paid_minor
         );
+    }
+
+    /**
+     * The dated payment history against this installment's penalty
+     * base: every non-reversed allocation to principal (and to
+     * interest, when the base is the whole installment), grouped by
+     * payment date. Reversed payments are excluded entirely, so a
+     * reversal followed by a re-accrual lands exactly where it would
+     * have had the payment never happened.
+     *
+     * @return BaseReduction[]
+     */
+    private static function baseReductions(LoanInstallment $installment, PenaltyConfig $config): array
+    {
+        $components = [AllocationComponent::Principal->value];
+        if ($config->base === PenaltyBase::OverdueInstallment) {
+            $components[] = AllocationComponent::Interest->value;
+        }
+
+        $loan = $installment->loan;
+
+        return LoanPaymentAllocation::query()
+            ->where('loan_installment_id', $installment->id)
+            ->whereIn('component', $components)
+            ->whereHas('payment', fn ($q) => $q->whereNull('reversed_at'))
+            ->with('payment:id,paid_at')
+            ->get()
+            ->groupBy(fn (LoanPaymentAllocation $a) => $a->payment->paid_at->format('Y-m-d'))
+            ->map(fn ($group, string $date) => new BaseReduction(
+                new DateTimeImmutable($date),
+                Money::minor((int) $group->sum('amount_minor'), $loan->currency, (int) $loan->scale),
+            ))
+            ->values()
+            ->all();
     }
 
     /**

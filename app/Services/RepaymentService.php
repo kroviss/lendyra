@@ -206,6 +206,15 @@ class RepaymentService
                     });
             }
 
+            // Penalty is a pure function of (schedule, payment history,
+            // waivers, as-of); this payment is now excluded from history,
+            // so re-accrue to land stored penalties exactly where they
+            // would be had the payment never happened.
+            app(PenaltyService::class)->accrue(
+                $loan,
+                new DateTimeImmutable(today()->format('Y-m-d'))
+            );
+
             if ($loan->status === LoanStatus::Closed) {
                 $loan->update(['status' => LoanStatus::Active, 'closed_at' => null]);
             }

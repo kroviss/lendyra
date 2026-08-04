@@ -180,6 +180,20 @@ class Show extends Component
                 $loan->update(['disbursed_at' => today()]);
                 $loan->refresh();
 
+                // Re-anchoring can leave a planned first due date far beyond
+                // today (e.g. a disbursement pulled months forward), which
+                // would misprice the first installment — same bound as the
+                // loan form.
+                if ($loan->first_due_date !== null) {
+                    $ceiling = Form::firstDueDateCeiling($loan->disbursed_at->format('Y-m-d'), $loan->frequency);
+
+                    if ($loan->first_due_date->format('Y-m-d') > $ceiling->format('Y-m-d')) {
+                        throw new \LogicException(__('First due date must be within two repayment periods of disbursement (on or before :date).', [
+                            'date' => $ceiling->format('Y-m-d'),
+                        ]));
+                    }
+                }
+
                 app(LoanScheduleService::class)->generateAndPersist($loan);
                 $loan->update(['status' => LoanStatus::Active, 'disbursed_by' => auth()->id()]);
                 app(LedgerService::class)->postDisbursement($loan);
@@ -298,6 +312,11 @@ class Show extends Component
             if ($value === false && $property === 'showPaymentModal') {
                 $this->reset('paymentAmount', 'paymentReference');
                 $this->paymentDate = today()->format('Y-m-d');
+            }
+
+            if ($value === false && $property === 'showPayoffModal') {
+                $this->reset('payoffMethod');
+                $this->payoffDate = today()->format('Y-m-d');
             }
 
             if ($value === false && $property === 'showRejectModal') {
@@ -443,6 +462,10 @@ class Show extends Component
             );
 
             $this->reset('showPaymentModal', 'paymentAmount', 'paymentReference');
+            // Re-init here, not just in updated(): that hook only fires on
+            // client-initiated closes, so a backdated date would otherwise
+            // silently prefill the next payment.
+            $this->paymentDate = today()->format('Y-m-d');
             $this->dispatch('toast', message: __('Payment recorded'));
         } catch (ValidationException $e) {
             throw $e; // field errors stay inline
@@ -518,6 +541,10 @@ class Show extends Component
             );
 
             $this->showPayoffModal = false;
+            // Same stale-state guard as recordPayment(): a backdated payoff
+            // date or non-default method must not leak into the next quote.
+            $this->reset('payoffMethod');
+            $this->payoffDate = today()->format('Y-m-d');
             $this->dispatch('toast', message: __('Loan settled in full'));
         } catch (ValidationException $e) {
             throw $e; // field errors stay inline
@@ -562,9 +589,16 @@ class Show extends Component
             if ($this->editingCollateralId) {
                 $collateral = $loan->collaterals()->findOrFail($this->editingCollateralId);
 
-                // Photos the user removed in the modal are gone from
-                // existingCollateralPhotos — delete their files too.
-                $removed = array_diff($collateral->photos ?? [], $this->existingCollateralPhotos);
+                // existingCollateralPhotos round-trips through the client, so
+                // treat it as untrusted: keep only entries that really belong
+                // to this collateral. A forged path must neither survive into
+                // the DB nor trick the diff below into deleting another
+                // record's file on the private disk.
+                $kept = array_values(array_intersect($collateral->photos ?? [], $this->existingCollateralPhotos));
+
+                // Photos the user removed in the modal are gone from the
+                // kept list — delete their files too.
+                $removed = array_diff($collateral->photos ?? [], $kept);
                 foreach ($removed as $path) {
                     Storage::disk('local')->delete($path);
                 }
@@ -573,7 +607,7 @@ class Show extends Component
                     'type' => $this->collateralType,
                     'description' => $this->collateralDescription ?: null,
                     'estimated_value_minor' => Money::of((string) $this->collateralValue, $loan->currency, (int) $loan->scale)->minor,
-                    'photos' => array_merge(array_values($this->existingCollateralPhotos), $photos) ?: null,
+                    'photos' => array_merge($kept, $photos) ?: null,
                 ]);
                 $message = __('Collateral updated');
             } else {

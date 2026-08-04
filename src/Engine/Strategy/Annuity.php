@@ -22,8 +22,17 @@ final class Annuity implements ScheduleStrategy
         $rate = $terms->periodicRate();
         $n = $terms->termCount;
 
+        // Zero-rate: the annuity formula degenerates to P/n, but rounding
+        // that half-up can over-amortize tiny principals (P = 1.00 over
+        // 66 periods → 66 × 0.02 > 1.00) and break the schedule sum
+        // invariant. Split the principal instead: near-equal integer
+        // parts that sum EXACTLY, with the last installment absorbing
+        // the remainder — the same last-row-absorbs convention the
+        // rate > 0 path uses for rounding drift.
+        $equalParts = $rate == 0.0 ? $terms->principal->split($n) : null;
+
         $payment = $rate == 0.0
-            ? $terms->principal->multiply(1 / $n)
+            ? null
             : $terms->principal->multiply($rate / (1 - (1 + $rate) ** -$n));
 
         $installments = [];
@@ -35,7 +44,11 @@ final class Annuity implements ScheduleStrategy
             $isLast = $index === $n - 1;
 
             // Last installment: pay off whatever balance remains, exactly.
-            $principal = $isLast ? $balance : $payment->sub($interest);
+            $principal = match (true) {
+                $isLast => $balance,
+                $equalParts !== null => $equalParts[$index],
+                default => $payment->sub($interest),
+            };
 
             // Guard against a payment smaller than the accrued interest
             // (possible with extreme rates + terms): never amortize negatively.

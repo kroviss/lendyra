@@ -8,6 +8,7 @@ use App\Models\LoanInstallment;
 use App\Support\CurrencyScale;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\DB;
+use Livewire\Attributes\Computed;
 use Livewire\Component;
 use Livewire\WithPagination;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -40,12 +41,26 @@ class Collections extends Component
         $this->resetPage();
     }
 
+    /** Same PII bar as the borrower export — cashiers cannot bulk-export. */
+    protected function canExport(): bool
+    {
+        return in_array(auth()->user()?->role, ['admin', 'manager', 'loan_officer'], true);
+    }
+
+    #[Computed]
+    public function exportAllowed(): bool
+    {
+        return $this->canExport();
+    }
+
     /**
      * The route sheet leaves the office: stream the whole current window
      * as CSV (same filters as the page, capped like tablewire exports).
      */
     public function exportCsv(): StreamedResponse
     {
+        abort_unless($this->canExport(), 403);
+
         $query = $this->buildQuery();
 
         return response()->streamDownload(function () use ($query) {

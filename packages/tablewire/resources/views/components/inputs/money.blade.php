@@ -29,11 +29,39 @@
                 if (value === null || value === '' || isNaN(Number(value))) return '';
                 return Number(value).toLocaleString('en-US', { maximumFractionDigits: {{ (int) $decimals }} });
             },
-            sync() {
+            parse(text) {
                 {{-- Money is never negative in any form here — reversals
-                     and write-offs have their own flows. --}}
-                const cleaned = this.display.replace(/[^0-9.]/g, '');
-                this.raw = cleaned === '' ? null : Number(cleaned);
+                     and write-offs have their own flows.
+
+                     Separators are interpreted, not stripped, so locales
+                     that type a decimal comma (fr/es/pt: '1234,56' or
+                     '1.234,56') parse to the intended amount:
+                     - both '.' and ',' present: the LAST one is the
+                       decimal point, the other is a thousands separator;
+                     - only ',': a final comma group of 1-2 digits is a
+                       decimal ('12,3' / '1234,56'), otherwise commas are
+                       thousands separators ('1,234' / '1,234,567');
+                     - only '.': the last dot is the decimal point
+                       (a single dot behaves exactly as before). --}}
+                const s = text.replace(/[^0-9.,]/g, '');
+                if (!/[0-9]/.test(s)) return null;
+                const lastDot = s.lastIndexOf('.');
+                const lastComma = s.lastIndexOf(',');
+                let sep = -1;
+                if (lastDot !== -1 && lastComma !== -1) {
+                    sep = Math.max(lastDot, lastComma);
+                } else if (lastComma !== -1) {
+                    sep = /,[0-9]{1,2}$/.test(s) ? lastComma : -1;
+                } else if (lastDot !== -1) {
+                    sep = lastDot;
+                }
+                const digits = part => part.replace(/[^0-9]/g, '');
+                const intPart = digits(sep === -1 ? s : s.slice(0, sep));
+                const fracPart = sep === -1 ? '' : digits(s.slice(sep + 1));
+                return Number(fracPart === '' ? intPart : intPart + '.' + fracPart);
+            },
+            sync() {
+                this.raw = this.parse(this.display);
             },
             init() {
                 this.display = this.format(this.raw);

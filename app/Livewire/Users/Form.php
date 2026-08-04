@@ -75,8 +75,10 @@ class Form extends Component
         }
 
         if ($this->user) {
-            // The last active admin must not lock themselves out.
-            if ($this->user->role === 'admin' && $data['role'] !== 'admin'
+            // The last active admin must not lock themselves out. Inactive
+            // admins are already outside the active pool — demoting them
+            // must stay allowed.
+            if ($this->user->role === 'admin' && $this->user->is_active && $data['role'] !== 'admin'
                 && User::where('role', 'admin')->where('is_active', true)->count() === 1) {
                 $this->addError('role', __('Cannot demote the last active admin.'));
 
@@ -121,7 +123,9 @@ class Form extends Component
             return;
         }
 
-        if ($this->user->role === 'admin'
+        // Only an ACTIVE admin counts toward the lock-out guard — deleting
+        // an already-deactivated admin never shrinks the active pool.
+        if ($this->user->role === 'admin' && $this->user->is_active
             && User::where('role', 'admin')->where('is_active', true)->count() === 1) {
             $this->addError('name', __('Cannot delete the last active admin.'));
 

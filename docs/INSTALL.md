@@ -94,7 +94,8 @@ double-charges.
 
 ## SMS payment reminders
 
-The scheduler runs `loans:send-reminders` daily at 09:00 (server time). It
+The scheduler runs `loans:send-reminders` daily at 09:00 in the app
+timezone (`APP_TIMEZONE`, see the Timezone section above). It
 sends two kinds of messages, deduplicated through the `sms_logs` table so a
 borrower is never texted twice for the same installment on the same basis:
 

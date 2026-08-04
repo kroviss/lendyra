@@ -6,6 +6,7 @@ use App\Enums\LoanStatus;
 use App\Models\Borrower;
 use App\Models\Loan;
 use App\Models\LoanProduct;
+use Carbon\CarbonImmutable;
 use DateTimeImmutable;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -14,6 +15,7 @@ use Illuminate\Support\Facades\Gate;
 use Livewire\Component;
 use LoanEngine\LoanTerms;
 use LoanEngine\Money;
+use LoanEngine\RepaymentFrequency;
 use LoanEngine\Schedule;
 use LoanEngine\ScheduleGenerator;
 use Throwable;
@@ -133,9 +135,53 @@ class Form extends Component
             'annual_rate' => 'required|numeric|min:0|max:1000',
             'term_count' => 'required|integer|min:1|max:600',
             'disbursed_at' => 'required|date',
-            'first_due_date' => 'nullable|date|after:disbursed_at',
+            'first_due_date' => [
+                'nullable',
+                'date',
+                'after:disbursed_at',
+                // Under equal-periods pricing period 1 always charges exactly
+                // one periodic rate no matter how long it really is, so an
+                // unbounded first due date silently misprices months of
+                // interest. Daily bases price stubs correctly, but a first
+                // due date beyond two periods is a data-entry error there
+                // too — the bound applies to every product.
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    $product = LoanProduct::find($this->loan_product_id);
+
+                    if (! $value || $product === null
+                        || ! strtotime((string) $value) || ! strtotime((string) $this->disbursed_at)) {
+                        return; // required/date rules already cover these
+                    }
+
+                    $ceiling = self::firstDueDateCeiling($this->disbursed_at, $product->frequency);
+
+                    if (CarbonImmutable::parse((string) $value)->startOfDay()->gt($ceiling)) {
+                        $fail(__('First due date must be within two repayment periods of disbursement (on or before :date).', [
+                            'date' => $ceiling->format('Y-m-d'),
+                        ]));
+                    }
+                },
+            ],
             'purpose' => 'nullable|max:2000',
         ];
+    }
+
+    /**
+     * Latest acceptable first due date: two period-lengths after
+     * disbursement. Shared with activation, which re-anchors the
+     * schedule on the actual disbursement day.
+     */
+    public static function firstDueDateCeiling(DateTimeImmutable|string $disbursedAt, RepaymentFrequency $frequency): CarbonImmutable
+    {
+        $anchor = CarbonImmutable::parse(
+            is_string($disbursedAt) ? $disbursedAt : $disbursedAt->format('Y-m-d')
+        )->startOfDay();
+
+        return match ($frequency) {
+            RepaymentFrequency::Monthly => $anchor->addMonthsNoOverflow(2),
+            RepaymentFrequency::Biweekly => $anchor->addDays(28),
+            RepaymentFrequency::Weekly => $anchor->addDays(14),
+        };
     }
 
     /** Processing fee in minor units: principal × % + flat. */
@@ -323,7 +369,14 @@ class Form extends Component
         // otherwise the select silently shows its placeholder while a
         // value is set.
         if ($this->borrower_id !== null && ! $borrowerOptions->contains('value', $this->borrower_id)) {
-            $selected = Borrower::find($this->borrower_id);
+            // Same branch scope as the option list — without it a scoped
+            // officer could $set() arbitrary IDs and read foreign borrowers'
+            // names and phones. A null hit renders as no selection.
+            $selected = Borrower::query()
+                ->when(auth()->user()?->scopedBranchId(), fn ($q, $branch) => $q->where(
+                    fn ($b) => $b->where('branch_id', $branch)->orWhereNull('branch_id')
+                ))
+                ->find($this->borrower_id);
             if ($selected !== null) {
                 $borrowerOptions->prepend([
                     'value' => $selected->id,

@@ -17,9 +17,19 @@ class EnsureInstalled
             // installer itself can render instead of a 500. This runs ONLY
             // while installed.lock is absent — once installed, the block above
             // guarantees this code is never reached again.
-            if (self::bootstrapEnv(base_path()) !== null) {
+            if (($key = self::bootstrapEnv(base_path())) !== null) {
                 // A key was just written to .env; redirect so the next request
                 // boots from the fresh file.
+                //
+                // Also inject the key into the runtime config: this request
+                // booted BEFORE the key existed, so config('app.key') is still
+                // empty. After the redirect is streamed, the kernel's
+                // terminate phase instantiates every web-group middleware
+                // (EncryptCookies takes the Encrypter in its constructor),
+                // which would otherwise throw MissingAppKeyException — logged
+                // as an ERROR on a perfectly healthy first request.
+                config(['app.key' => $key]);
+
                 return redirect('/install');
             }
 

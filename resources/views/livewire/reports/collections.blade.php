@@ -11,10 +11,12 @@
             </select>
             <input type="search" wire:model.live.debounce.400ms="search" placeholder="{{ __('Search...') }}" aria-label="{{ __('Search') }}"
                 class="w-56 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40" />
-            <button wire:click="exportCsv" wire:loading.attr="disabled" wire:target="exportCsv"
-                class="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
-                {{ __('Export CSV') }}
-            </button>
+            @if ($this->exportAllowed)
+                <button wire:click="exportCsv" wire:loading.attr="disabled" wire:target="exportCsv"
+                    class="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                    {{ __('Export CSV') }}
+                </button>
+            @endif
         </div>
         <div class="flex gap-2 text-sm">
             @if (in_array(auth()->user()?->role, ['admin', 'manager', 'accountant'], true))

@@ -2,6 +2,46 @@
 
 All notable changes to Lendyra are documented here.
 
+## 1.0.3 — 2026-08-04
+
+### Fixed
+- **Backdated payments no longer swallow penalty that accrued after the payment
+  date.** Penalty is now recomputed from the dated payment history (segment by
+  segment on the principal actually outstanding), so a bank transfer that
+  arrived on time but was keyed in late settles its installment in full instead
+  of being partially diverted to penalty. The same rework fixes the mirror-image
+  bug: after a partial payment on an overdue installment, penalty keeps accruing
+  on the reduced balance instead of silently freezing.
+- Reversing a payment now re-accrues penalties as if the payment had never
+  happened, and settle → reverse → re-settle books identical amounts.
+- Collateral photo lists are validated server-side against the record's own
+  stored photos — forged paths can no longer be injected into the database or
+  used to delete other records' files from the private disk.
+- The record-payment modal resets its date to today after a successful save, so
+  a legitimately backdated payment no longer leaks its date into the next one
+  (payoff date/method now reset the same way).
+- Money inputs understand decimal commas: typing `1234,56` in the French,
+  Spanish or Portuguese UI is parsed as 1 234.56 — previously the comma was
+  stripped and the amount inflated 100×. Mixed `1.234,56` / `1,234.56`
+  formats are both handled.
+- The first due date is bounded to two repayment periods after disbursement
+  (enforced on the form and re-checked at activation), preventing mispriced
+  stub periods under the equal-periods interest basis.
+- Zero-rate loans with very small principals over many terms no longer crash
+  at activation; the schedule splits the principal exactly for any amount.
+- Demoting or deleting a *deactivated* admin is no longer blocked by the
+  last-active-admin guard (the guard still protects the last active admin).
+- The collections report CSV export now carries the same PII bar as every
+  other export — cashiers can view the page but not bulk-export borrower
+  names and phone numbers.
+- The loan form's selected-borrower fallback is branch-scoped, closing an
+  ID-probing disclosure of out-of-branch borrower names and phones.
+- Added the missing `Language` translation for the locale switcher label.
+- A pristine install's very first request no longer writes two spurious
+  errors to the log while bootstrapping the application key.
+- Installation guide: reminder schedule time is documented as app timezone
+  (`APP_TIMEZONE`), matching the Timezone section and the scheduler.
+
 ## 1.0.2 — 2026-08-03
 
 ### Fixed

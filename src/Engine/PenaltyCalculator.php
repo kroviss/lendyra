@@ -54,4 +54,73 @@ final class PenaltyCalculator
 
         return self::amount($base, $config, self::chargeableDays($due->dueDate, $asOf, $config->graceDays));
     }
+
+    /**
+     * Total penalty accrued as of $asOf, as a pure function of the
+     * ORIGINAL scheduled base and the dated payment history against it:
+     * the integral over time segments of daily rate × base outstanding
+     * during that segment, where the base drops at each reduction's
+     * effective date.
+     *
+     * Because nothing here depends on when the computation runs, a
+     * backdated payment yields the same figure whether penalty is
+     * recomputed on the payment's effective date or any day after it —
+     * and a reduction dated on (or before) the due date means no
+     * penalty ever accrues at all.
+     *
+     * The cap, when configured, is measured against the base of the
+     * first segment that actually accrued (reductions only shrink the
+     * base, so that is the largest base penalty was ever charged on —
+     * and with no reductions this degenerates to amount()'s behavior
+     * exactly).
+     *
+     * @param  BaseReduction[]  $reductions  any order; sorted internally
+     */
+    public static function accruedWithHistory(
+        DateTimeImmutable $dueDate,
+        Money $scheduledBase,
+        array $reductions,
+        PenaltyConfig $config,
+        DateTimeImmutable $asOf,
+    ): Money {
+        usort($reductions, fn (BaseReduction $a, BaseReduction $b) => $a->date <=> $b->date);
+
+        $total = Money::zero($scheduledBase->currency, $scheduledBase->scale);
+        $base = $scheduledBase;
+        $capBase = null;
+        $daysBilled = 0;
+
+        foreach ($reductions as $reduction) {
+            $upTo = $reduction->date < $asOf ? $reduction->date : $asOf;
+            $days = self::chargeableDays($dueDate, $upTo, $config->graceDays) - $daysBilled;
+
+            if ($days > 0) {
+                if ($base->minor > 0) {
+                    $capBase ??= $base;
+                    $total = $total->add($base->multiply($config->dailyRatePercent / 100 * $days));
+                }
+                $daysBilled += $days;
+            }
+
+            $base = $base->sub($reduction->amount);
+            if ($base->isNegative()) {
+                $base = Money::zero($base->currency, $base->scale);
+            }
+        }
+
+        $days = self::chargeableDays($dueDate, $asOf, $config->graceDays) - $daysBilled;
+        if ($days > 0 && $base->minor > 0) {
+            $capBase ??= $base;
+            $total = $total->add($base->multiply($config->dailyRatePercent / 100 * $days));
+        }
+
+        if ($config->capPercentOfBase !== null && $capBase !== null) {
+            $cap = $capBase->multiply($config->capPercentOfBase / 100);
+            if ($total->minor > $cap->minor) {
+                return $cap;
+            }
+        }
+
+        return $total;
+    }
 }

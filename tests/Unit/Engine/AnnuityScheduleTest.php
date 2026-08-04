@@ -11,6 +11,7 @@ use LoanEngine\InterestMethod;
 use LoanEngine\LoanTerms;
 use LoanEngine\Money;
 use LoanEngine\RepaymentFrequency;
+use LoanEngine\Schedule;
 use LoanEngine\ScheduleGenerator;
 use PHPUnit\Framework\TestCase;
 
@@ -21,7 +22,7 @@ use PHPUnit\Framework\TestCase;
  */
 class AnnuityScheduleTest extends TestCase
 {
-    private function schedule(): \LoanEngine\Schedule
+    private function schedule(): Schedule
     {
         return ScheduleGenerator::generate(new LoanTerms(
             principal: Money::of('10000.00'),
@@ -87,6 +88,82 @@ class AnnuityScheduleTest extends TestCase
 
         $this->assertTrue($schedule->totalInterest()->isZero());
         $this->assertSame('100.00', $schedule->installments[0]->total()->toDecimalString());
+    }
+
+    private function zeroRateSchedule(Money $principal, int $termCount, RepaymentFrequency $frequency = RepaymentFrequency::Monthly): Schedule
+    {
+        return ScheduleGenerator::generate(new LoanTerms(
+            principal: $principal,
+            annualRatePercent: 0.0,
+            termCount: $termCount,
+            frequency: $frequency,
+            method: InterestMethod::Annuity,
+            disbursedAt: new DateTimeImmutable('2026-01-15'),
+        ));
+    }
+
+    public function test_zero_rate_tiny_principal_does_not_over_amortize(): void
+    {
+        // round(P/n) half-up used to give 0.02 × 66 = 1.32 > 1.00 and
+        // blow the Schedule sum invariant. The constructor itself
+        // asserts the invariants, so surviving generate() is the proof.
+        $schedule = $this->zeroRateSchedule(Money::of('1.00'), 66);
+
+        $this->assertCount(66, $schedule->installments);
+        $this->assertTrue($schedule->totalInterest()->isZero());
+        $this->assertTrue($schedule->last()->closingBalance->isZero());
+
+        foreach ($schedule->installments as $installment) {
+            $this->assertFalse($installment->principal->isNegative());
+        }
+    }
+
+    public function test_zero_rate_one_minor_unit_principal(): void
+    {
+        $schedule = $this->zeroRateSchedule(Money::minor(1), 66);
+
+        $sum = 0;
+        foreach ($schedule->installments as $installment) {
+            $this->assertGreaterThanOrEqual(0, $installment->principal->minor);
+            $sum += $installment->principal->minor;
+        }
+
+        $this->assertSame(1, $sum);
+        $this->assertSame(1, $schedule->last()->principal->minor); // last absorbs the remainder
+    }
+
+    public function test_zero_rate_last_installment_absorbs_remainder(): void
+    {
+        // 100 minor over 7: six parts of 14 and a last part of 16.
+        $schedule = $this->zeroRateSchedule(Money::minor(100), 7);
+
+        foreach (array_slice($schedule->installments, 0, 6) as $installment) {
+            $this->assertSame(14, $installment->principal->minor, "Installment {$installment->number}");
+        }
+        $this->assertSame(16, $schedule->last()->principal->minor);
+        $this->assertTrue($schedule->last()->closingBalance->isZero());
+    }
+
+    public function test_zero_rate_invariants_hold_for_small_principals_across_all_terms(): void
+    {
+        // Schedule's constructor throws on any invariant violation, so
+        // every generated combination is proven exact.
+        $count = 0;
+
+        foreach ([1, 2, 3, 100, 999] as $minor) {
+            for ($termCount = 1; $termCount <= 600; $termCount++) {
+                $schedule = $this->zeroRateSchedule(
+                    Money::minor($minor),
+                    $termCount,
+                    RepaymentFrequency::Weekly
+                );
+
+                $this->assertTrue($schedule->last()->closingBalance->isZero());
+                $count++;
+            }
+        }
+
+        $this->assertSame(3000, $count);
     }
 
     public function test_annuity_rejects_actual_day_basis(): void
