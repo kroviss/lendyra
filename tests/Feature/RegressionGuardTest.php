@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Enums\LoanStatus;
+use App\Livewire\Borrowers\Index;
+use App\Livewire\Loans\Show;
 use App\Models\Borrower;
+use App\Models\Branch;
 use App\Models\Loan;
 use App\Models\LoanProduct;
 use App\Models\User;
@@ -65,7 +68,7 @@ class RegressionGuardTest extends TestCase
         $loan = $this->makeLoan();
 
         Livewire::actingAs($this->admin())
-            ->test(\App\Livewire\Loans\Show::class, ['loan' => $loan->id])
+            ->test(Show::class, ['loan' => $loan->id])
             ->set('collateralType', '')
             ->set('collateralValue', null)
             ->call('addCollateral')
@@ -81,7 +84,7 @@ class RegressionGuardTest extends TestCase
         $existing = $loan->collaterals()->first();
 
         Livewire::actingAs($this->admin())
-            ->test(\App\Livewire\Loans\Show::class, ['loan' => $loan->id])
+            ->test(Show::class, ['loan' => $loan->id])
             ->call('editCollateral', $existing->id)
             ->assertSet('editingCollateralId', $existing->id)
             ->set('showCollateralModal', false)          // Cancel
@@ -101,7 +104,7 @@ class RegressionGuardTest extends TestCase
     {
         config(['lms.branch_scoping' => true]);
 
-        $branch = \App\Models\Branch::create(['name' => 'B1', 'code' => 'B1-'.uniqid()]);
+        $branch = Branch::create(['name' => 'B1', 'code' => 'B1-'.uniqid()]);
         $officer = User::create([
             'name' => 'Off', 'email' => 'off-'.uniqid().'@example.com',
             'password' => bcrypt('x'), 'role' => 'loan_officer', 'branch_id' => $branch->id,
@@ -110,7 +113,7 @@ class RegressionGuardTest extends TestCase
         $branchless = $this->makeLoan(branchId: null);
         $this->actingAs($officer)->get("/loans/{$branchless->id}")->assertOk();
 
-        $other = \App\Models\Branch::create(['name' => 'B2', 'code' => 'B2-'.uniqid()]);
+        $other = Branch::create(['name' => 'B2', 'code' => 'B2-'.uniqid()]);
         $foreign = $this->makeLoan(branchId: $other->id);
         $this->actingAs($officer)->get("/loans/{$foreign->id}")->assertForbidden();
         $this->actingAs($officer)->get("/loans/{$foreign->id}/statement")->assertForbidden();
@@ -122,7 +125,7 @@ class RegressionGuardTest extends TestCase
         $loan = $this->makeLoan(LoanStatus::WrittenOff);
 
         Livewire::actingAs($this->admin())
-            ->test(\App\Livewire\Loans\Show::class, ['loan' => $loan->id])
+            ->test(Show::class, ['loan' => $loan->id])
             ->set('collateralType', 'Gold')
             ->set('collateralValue', 100.0)
             ->call('addCollateral')
@@ -137,7 +140,7 @@ class RegressionGuardTest extends TestCase
         $borrower = Borrower::create(['first_name' => '=cmd|calc', 'last_name' => 'Injection']);
 
         // Call the component method directly and capture the stream.
-        $component = new \App\Livewire\Borrowers\Index;
+        $component = new Index;
         $this->actingAs($this->admin());
 
         ob_start();
@@ -157,7 +160,7 @@ class RegressionGuardTest extends TestCase
         $collateral = $loan->collaterals()->first();
 
         Livewire::actingAs($this->admin())
-            ->test(\App\Livewire\Loans\Show::class, ['loan' => $loan->id])
+            ->test(Show::class, ['loan' => $loan->id])
             ->call('releaseCollateral', $collateral->id)
             ->assertSet('actionError', null);
 
@@ -169,7 +172,7 @@ class RegressionGuardTest extends TestCase
     {
         config(['lms.branch_scoping' => true]);
 
-        $branch = \App\Models\Branch::create(['name' => 'S1', 'code' => 'S1-'.uniqid()]);
+        $branch = Branch::create(['name' => 'S1', 'code' => 'S1-'.uniqid()]);
         $officer = User::create([
             'name' => 'Off', 'email' => 'off-'.uniqid().'@example.com',
             'password' => bcrypt('x'), 'role' => 'loan_officer', 'branch_id' => $branch->id,

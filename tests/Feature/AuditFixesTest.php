@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Enums\LoanStatus;
+use App\Livewire\Loans\Form;
+use App\Livewire\Loans\Show;
 use App\Models\Borrower;
+use App\Models\JournalEntry;
 use App\Models\Loan;
 use App\Models\LoanProduct;
 use App\Models\User;
@@ -121,7 +124,7 @@ class AuditFixesTest extends TestCase
         ]);
 
         Livewire::actingAs($officer)
-            ->test(\App\Livewire\Loans\Form::class, ['loan' => $loan])
+            ->test(Form::class, ['loan' => $loan])
             ->set('amount', 100000.0)
             ->call('save');
 
@@ -181,7 +184,7 @@ class AuditFixesTest extends TestCase
         $admin = $this->makeUser('admin');
 
         Livewire::actingAs($admin)
-            ->test(\App\Livewire\Loans\Show::class, ['loan' => $loan->id])
+            ->test(Show::class, ['loan' => $loan->id])
             ->set('payoffDate', now()->addMonth()->format('Y-m-d'))
             ->call('settlePayoff')
             ->assertHasErrors('payoffDate');
@@ -211,7 +214,7 @@ class AuditFixesTest extends TestCase
 
         $admin = $this->makeUser('admin');
         $component = Livewire::actingAs($admin)
-            ->test(\App\Livewire\Loans\Show::class, ['loan' => $loan->id])
+            ->test(Show::class, ['loan' => $loan->id])
             ->call('activate')
             ->assertSet('actionError', null);
 
@@ -220,9 +223,9 @@ class AuditFixesTest extends TestCase
         $this->assertSame(LoanStatus::Active, $loan->status);
 
         // Second activation attempt fails cleanly, posts nothing extra.
-        $entriesBefore = \App\Models\JournalEntry::where('reference_type', 'loan')->where('reference_id', $loan->id)->count();
+        $entriesBefore = JournalEntry::where('reference_type', 'loan')->where('reference_id', $loan->id)->count();
         $component->call('activate')->assertSet('actionError', fn ($e) => $e !== null);
-        $this->assertSame($entriesBefore, \App\Models\JournalEntry::where('reference_type', 'loan')->where('reference_id', $loan->id)->count());
+        $this->assertSame($entriesBefore, JournalEntry::where('reference_type', 'loan')->where('reference_id', $loan->id)->count());
     }
 
     /** Default admin credential is never planted next to real users. */

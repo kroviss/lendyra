@@ -13,7 +13,7 @@ namespace LoanEngine;
 final class PaymentAllocator
 {
     /**
-     * @param InstallmentDue[] $dues
+     * @param  InstallmentDue[]  $dues
      */
     public static function allocate(Money $payment, array $dues, ?AllocationPolicy $policy = null): AllocationResult
     {

@@ -10,6 +10,5 @@ final class AllocationLine
         public readonly int $installmentNumber,
         public readonly AllocationComponent $component,
         public readonly Money $amount,
-    ) {
-    }
+    ) {}
 }

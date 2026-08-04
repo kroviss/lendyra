@@ -25,8 +25,7 @@ class Column
         public string $field,
         public string $label,
         public ?string $sortAs = null,
-    ) {
-    }
+    ) {}
 
     public static function make(string $field, ?string $label = null): static
     {

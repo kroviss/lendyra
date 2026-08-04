@@ -11,7 +11,7 @@ use LoanEngine\LoanTerms;
 interface ScheduleStrategy
 {
     /**
-     * @param DateTimeImmutable[] $dueDates one per installment
+     * @param  DateTimeImmutable[]  $dueDates  one per installment
      * @return Installment[]
      */
     public function generate(LoanTerms $terms, array $dueDates): array;

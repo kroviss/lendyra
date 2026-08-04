@@ -11,8 +11,7 @@ final class PayoffQuote
         public readonly Money $pastDueInterest,
         public readonly Money $accruedInterest,
         public readonly Money $penalty,
-    ) {
-    }
+    ) {}
 
     public function total(): Money
     {

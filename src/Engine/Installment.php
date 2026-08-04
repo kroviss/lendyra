@@ -15,8 +15,7 @@ final class Installment
         public readonly Money $principal,
         public readonly Money $interest,
         public readonly Money $closingBalance,
-    ) {
-    }
+    ) {}
 
     public function total(): Money
     {

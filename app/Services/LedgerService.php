@@ -8,6 +8,7 @@ use App\Models\Loan;
 use App\Models\LoanPayment;
 use InvalidArgumentException;
 use LoanEngine\AllocationComponent;
+use LoanEngine\Money;
 use LogicException;
 
 /**
@@ -72,7 +73,7 @@ class LedgerService
     }
 
     /** Dr Write-off Expense / Cr Portfolio for the unrecoverable principal. */
-    public function postWriteOff(Loan $loan, \LoanEngine\Money $remainingPrincipal): JournalEntry
+    public function postWriteOff(Loan $loan, Money $remainingPrincipal): JournalEntry
     {
         return $this->post(
             date: now()->format('Y-m-d'),

@@ -6,7 +6,6 @@ namespace LoanEngine\Strategy;
 
 use LoanEngine\Installment;
 use LoanEngine\LoanTerms;
-use LoanEngine\Money;
 use LoanEngine\PeriodInterest;
 
 /**

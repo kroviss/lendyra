@@ -5,12 +5,16 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Enums\LoanStatus;
+use App\Livewire\Loans\Index;
+use App\Livewire\Loans\Show;
+use App\Livewire\Profile;
 use App\Models\Borrower;
 use App\Models\Loan;
 use App\Models\LoanProduct;
 use App\Models\User;
 use App\Services\LoanScheduleService;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
+use Illuminate\Support\Facades\Hash;
 use Livewire\Livewire;
 use LoanEngine\Money;
 use Tests\TestCase;
@@ -61,7 +65,7 @@ class UxBatchTest extends TestCase
         // Denials now surface in the page's error banner instead of
         // throwing the user out to a full-page 403.
         Livewire::actingAs($accountant)
-            ->test(\App\Livewire\Loans\Show::class, ['loan' => $loan->id])
+            ->test(Show::class, ['loan' => $loan->id])
             ->call('releaseCollateral', $collateral->id)
             ->assertSet('actionError', fn ($error) => $error !== null);
 
@@ -74,7 +78,7 @@ class UxBatchTest extends TestCase
         $admin = $this->makeUser('admin');
 
         Livewire::actingAs($admin)
-            ->test(\App\Livewire\Loans\Index::class)
+            ->test(Index::class)
             ->set('statusFilter', 'active')
             ->assertSee($active->loan_number)
             ->set('statusFilter', 'closed')
@@ -87,7 +91,7 @@ class UxBatchTest extends TestCase
         $admin = $this->makeUser('admin');
 
         Livewire::actingAs($admin)
-            ->test(\App\Livewire\Loans\Index::class)
+            ->test(Index::class)
             ->set('search', 'Zorigt')
             ->assertSee($loan->loan_number)
             ->set('search', '+97699110022')
@@ -105,7 +109,7 @@ class UxBatchTest extends TestCase
         $admin = $this->makeUser('admin');
 
         Livewire::actingAs($admin)
-            ->test(\App\Livewire\Loans\Show::class, ['loan' => $loan->id])
+            ->test(Show::class, ['loan' => $loan->id])
             ->set('paymentAmount', 100.0)
             ->set('paymentDate', now()->addYear()->format('Y-m-d'))
             ->call('recordPayment')
@@ -122,7 +126,7 @@ class UxBatchTest extends TestCase
         $this->actingAs($user)->get('/profile')->assertOk()->assertSee('My Profile');
 
         Livewire::actingAs($user)
-            ->test(\App\Livewire\Profile::class)
+            ->test(Profile::class)
             ->set('name', 'New Name')
             ->set('current_password', 'secret123')
             ->set('password', 'newpassword9')
@@ -131,7 +135,7 @@ class UxBatchTest extends TestCase
             ->assertHasNoErrors();
 
         $this->assertSame('New Name', $user->fresh()->name);
-        $this->assertTrue(\Illuminate\Support\Facades\Hash::check('newpassword9', $user->fresh()->password));
+        $this->assertTrue(Hash::check('newpassword9', $user->fresh()->password));
     }
 
     public function test_collections_report_lists_due_installments(): void

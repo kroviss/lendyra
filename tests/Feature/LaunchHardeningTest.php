@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Enums\LoanStatus;
+use App\Livewire\Loans\Show;
 use App\Models\Borrower;
 use App\Models\JournalEntry;
 use App\Models\Loan;
@@ -114,7 +115,7 @@ class LaunchHardeningTest extends TestCase
         $officer = $this->makeUser('loan_officer');
 
         Livewire::actingAs($officer)
-            ->test(\App\Livewire\Loans\Show::class, ['loan' => $loan->id])
+            ->test(Show::class, ['loan' => $loan->id])
             ->call('activate')
             ->assertSet('actionError', fn ($error) => $error !== null);
 
@@ -127,7 +128,7 @@ class LaunchHardeningTest extends TestCase
         $cashier = $this->makeUser('cashier');
 
         Livewire::actingAs($cashier)
-            ->test(\App\Livewire\Loans\Show::class, ['loan' => $loan->id])
+            ->test(Show::class, ['loan' => $loan->id])
             ->set('paymentAmount', 100.0)
             ->set('paymentDate', '2026-02-15')
             ->call('recordPayment')
@@ -152,7 +153,7 @@ class LaunchHardeningTest extends TestCase
         $admin = $this->makeUser('admin');
 
         Livewire::actingAs($admin)
-            ->test(\App\Livewire\Loans\Show::class, ['loan' => $loan->id])
+            ->test(Show::class, ['loan' => $loan->id])
             ->call('writeOff')
             ->assertSet('actionError', null);
 

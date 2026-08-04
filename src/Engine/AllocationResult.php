@@ -10,8 +10,7 @@ final class AllocationResult
     public function __construct(
         public readonly array $lines,
         public readonly Money $remainder,
-    ) {
-    }
+    ) {}
 
     public function allocatedTo(AllocationComponent $component): Money
     {

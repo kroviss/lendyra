@@ -19,8 +19,7 @@ final class InstallmentDue
         public readonly Money $principalDue,
         public readonly Money $interestDue,
         public readonly Money $penaltyDue,
-    ) {
-    }
+    ) {}
 
     public static function fromInstallment(Installment $installment): self
     {
