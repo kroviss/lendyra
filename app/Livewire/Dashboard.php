@@ -56,7 +56,9 @@ class Dashboard extends Component
 
         // Collections trend, last 6 months, in the portfolio's primary
         // (most common) currency only — a chart must not mix currencies.
-        $primaryCurrency = Loan::query()
+        // Scoped like every other figure on the page, so a branch user's
+        // chart currency never reveals currencies absent from their branch.
+        $primaryCurrency = $scope(Loan::query())
             ->selectRaw('currency, COUNT(*) as c')
             ->groupBy('currency')
             ->orderByDesc('c')

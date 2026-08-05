@@ -24,7 +24,7 @@ class PayoffService
             $this->schedules->preview($loan),
             $loan->duesState(),
             $asOf,
-            $loan->product->payoff_interest_mode,
+            $loan->payoffInterestMode(),
         );
     }
 
@@ -42,7 +42,7 @@ class PayoffService
             $loan = Loan::lockForUpdate()->findOrFail($loan->id);
 
             if (! $loan->status->acceptsPayments()) {
-                throw new \LogicException("Loan {$loan->loan_number} is {$loan->status->value} and cannot be settled.");
+                throw new \LogicException(__('Loan :loan is :status and cannot be settled.', ['loan' => $loan->loan_number, 'status' => $loan->status->label()]));
             }
 
             // A payoff dated before disbursement would make every

@@ -38,12 +38,26 @@ class Index extends BaseTable
 
     protected function query(): Builder
     {
+        // The date bounds come straight from the query string, so a pasted or
+        // garbage value ("2026-08-32", "yesterday") must never reach the SQL
+        // comparison — MySQL raises "Incorrect DATE value" and 500s the page.
+        $from = $this->cleanDate($this->from);
+        $to = $this->cleanDate($this->to);
+
         return LoanPayment::query()
             ->with(['loan.borrower', 'receivedBy'])
             ->when(auth()->user()?->scopedBranchId(), fn (Builder $q, int $branch) => $q->whereHas('loan', fn ($l) => $l->where(fn ($b) => $b->where('branch_id', $branch)->orWhereNull('branch_id'))))
             ->when($this->methodFilter !== '', fn (Builder $q) => $q->where('method', $this->methodFilter))
-            ->when($this->from !== '', fn (Builder $q) => $q->where('paid_at', '>=', $this->from))
-            ->when($this->to !== '', fn (Builder $q) => $q->where('paid_at', '<=', $this->to));
+            ->when($from !== null, fn (Builder $q) => $q->where('paid_at', '>=', $from))
+            ->when($to !== null, fn (Builder $q) => $q->where('paid_at', '<=', $to));
+    }
+
+    /** A strict Y-m-d date, or null for anything else. */
+    private function cleanDate(string $value): ?string
+    {
+        $date = \DateTime::createFromFormat('Y-m-d', $value);
+
+        return $date && $date->format('Y-m-d') === $value ? $value : null;
     }
 
     protected function searchAlso(): array

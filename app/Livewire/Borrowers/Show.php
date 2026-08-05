@@ -64,7 +64,10 @@ class Show extends Component
         $borrower = Borrower::with([
             'loans' => $scopeLoans,
             'loans.product',
-            'loans.installments',
+            // Only active loans' installments are ever read (outstanding +
+            // overdue stats). Skip hydrating the schedule of every closed and
+            // written-off loan a repeat borrower has ever had.
+            'loans.installments' => fn ($q) => $q->whereHas('loan', fn ($l) => $l->where('status', LoanStatus::Active)),
         ])->findOrFail($this->borrowerId);
 
         abort_if($scoped !== null && $borrower->branch_id !== null && (int) $borrower->branch_id !== $scoped, 403);

@@ -56,6 +56,16 @@ final class Annuity implements ScheduleStrategy
                 $principal = Money::zero($balance->currency, $balance->scale);
             }
 
+            // Never amortize MORE than the outstanding balance either: with a
+            // tiny principal or a long term, rounding the level payment up can
+            // push a non-last row's principal past the remaining balance,
+            // driving it negative before the last row and tripping the
+            // schedule invariant. Clamp to the balance; any leftover rows then
+            // carry zero (the loan simply amortizes out early).
+            if (! $isLast && $principal->minor > $balance->minor) {
+                $principal = $balance;
+            }
+
             $closing = $balance->sub($principal);
 
             $installments[] = new Installment(

@@ -2,6 +2,67 @@
 
 All notable changes to Lendyra are documented here.
 
+## 1.0.4 — 2026-08-05
+
+### Security
+- **Branch scoping now fails closed.** A branch-scoped account (loan officer,
+  cashier, accountant) left with no branch assigned previously saw *every*
+  branch's data — the scope had nothing to bind to. Such accounts now match no
+  branch until one is assigned, and the user form requires a branch for scoped
+  roles whenever branch scoping is enabled.
+- Cashiers can no longer erase accrued penalties by backdating a payment onto an
+  overdue due date: without the write-off privilege, payment dates are capped to
+  a recent window (`LMS_PAYMENT_BACKDATE_DAYS`, default 7). Managers may still
+  backdate to disbursement.
+- Loan officers can no longer destroy collateral photos or write down a
+  collateral's value through the edit path — those changes now require a
+  manager, matching the delete/release gate.
+- Anti-framing headers (`X-Frame-Options`, CSP `frame-ancestors`) are sent on
+  every response so money actions cannot be clickjacked, and a root `.htaccess` /
+  `web.config` shields `.env`, source and storage for buyers who point the
+  document root at the project root by mistake.
+- The dashboard's chart currency is now branch-scoped like every other figure.
+
+### Fixed
+- **Penalty and early-payoff terms are snapshotted onto each loan at
+  origination** (like the interest rate already was). Re-pricing a product no
+  longer retroactively rewrites the penalty history of every live loan on the
+  next nightly accrual.
+- **Annuity schedules for very small principals (and long terms on 0-decimal
+  currencies) no longer fail to generate.** Rounding the level payment up could
+  amortize a row past the remaining balance and trip the schedule invariant,
+  blanking the preview and blocking activation; a non-last row's principal is
+  now clamped to the outstanding balance.
+- Money inputs now read dot-grouped thousands (`1.234`, `2.500`) as whole
+  amounts in the Spanish/Portuguese UI instead of tiny fractions — the mirror of
+  the decimal-comma fix.
+- The loan form's schedule preview refreshes immediately when the amount changes
+  (the money field now honours `wire:model.live`).
+- French/Spanish/Portuguese now translate framework messages too: field
+  validation errors, the paginator, auth and password-reset lines ship in all
+  four languages, and error labels read "borrower"/"annual rate" instead of
+  "borrower id"/"annual_rate".
+- Engine guard messages ("loan cannot accept payments", "payment already
+  reversed", "schedule cannot be regenerated") are translated and name the loan
+  status by its label.
+- Editing a loan whose product was later deactivated still shows that product
+  (marked inactive) instead of a blank select.
+- The record-payment modal resets its method as well as amount/date, and
+  replacing a borrower photo deletes the old file from the private disk.
+- Inline row actions (waive, reverse, collateral, guarantor) disable while
+  their request is in flight, so a double-click cannot fire twice.
+
+### Performance
+- The portfolio report no longer hydrates every loan in arrears before capping
+  to 200; PAR and the detail rows are derived from one grouped query and only
+  the worst 200 loans are loaded.
+- The nightly penalty accrual pulls each loan's allocation history in a single
+  query and skips writing installments whose penalty is unchanged.
+- The payments hub no longer 500s on a malformed `from`/`to` date in the URL,
+  the collections report has a stable sort tiebreaker (no repeated/dropped rows
+  across pages or export chunks), and the borrower profile only loads active
+  loans' installments.
+
 ## 1.0.3 — 2026-08-04
 
 ### Fixed

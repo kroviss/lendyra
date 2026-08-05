@@ -124,7 +124,10 @@ class Collections extends Component
                         ->orWhere('last_name', 'like', $like)
                         ->orWhere('phone', 'like', $like)));
             })
-            ->orderBy('due_date');
+            // due_date is highly non-unique; without a stable tiebreaker the
+            // export's skip/take chunks and page 1→2 can repeat or drop rows.
+            ->orderBy('due_date')
+            ->orderBy('id');
     }
 
     public function render(): View

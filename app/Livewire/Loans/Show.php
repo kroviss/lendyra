@@ -310,7 +310,10 @@ class Show extends Component
             }
 
             if ($value === false && $property === 'showPaymentModal') {
-                $this->reset('paymentAmount', 'paymentReference');
+                // Reset the method too (like the payoff modal) — a sticky
+                // "mobile" from one borrower must not carry into the next
+                // cashier's cash receipt.
+                $this->reset('paymentAmount', 'paymentReference', 'paymentMethod');
                 $this->paymentDate = today()->format('Y-m-d');
             }
 
@@ -440,11 +443,22 @@ class Show extends Component
     {
         $this->actionError = null;
 
+        // Cashiers may only backdate within a short window: dating a payment on
+        // or before an overdue due date silently erases accrued penalties, which
+        // is a manager-only waiver in disguise. write-off-loans holders (admin/
+        // manager) may backdate all the way to disbursement.
+        $disbursedFloor = $this->loan()->disbursed_at?->format('Y-m-d') ?? '2000-01-01';
+        $earliestDate = Gate::allows('write-off-loans')
+            ? $disbursedFloor
+            : max($disbursedFloor, today()->subDays((int) config('lms.payment_backdate_days', 7))->format('Y-m-d'));
+
         $this->validate([
             'paymentAmount' => 'required|numeric|min:0.01',
-            'paymentDate' => 'required|date|before_or_equal:today|after_or_equal:'.($this->loan()->disbursed_at?->format('Y-m-d') ?? '2000-01-01'),
+            'paymentDate' => 'required|date|before_or_equal:today|after_or_equal:'.$earliestDate,
             'paymentMethod' => 'required|in:cash,bank,mobile',
             'paymentReference' => 'nullable|max:64',
+        ], [
+            'paymentDate.after_or_equal' => __('You can only backdate a payment up to :days days. Ask a manager to record older payments.', ['days' => (int) config('lms.payment_backdate_days', 7)]),
         ]);
 
         $loan = $this->loan();
@@ -461,7 +475,7 @@ class Show extends Component
                 receivedBy: auth()->id(),
             );
 
-            $this->reset('showPaymentModal', 'paymentAmount', 'paymentReference');
+            $this->reset('showPaymentModal', 'paymentAmount', 'paymentReference', 'paymentMethod');
             // Re-init here, not just in updated(): that hook only fires on
             // client-initiated closes, so a backdated date would otherwise
             // silently prefill the next payment.
@@ -597,8 +611,20 @@ class Show extends Component
                 $kept = array_values(array_intersect($collateral->photos ?? [], $this->existingCollateralPhotos));
 
                 // Photos the user removed in the modal are gone from the
-                // kept list — delete their files too.
+                // kept list.
                 $removed = array_diff($collateral->photos ?? [], $kept);
+                $newValueMinor = Money::of((string) $this->collateralValue, $loan->currency, (int) $loan->scale)->minor;
+
+                // Destroying photos or writing down the appraised value on a
+                // live loan is the substance of a delete/release, which is
+                // reserved for managers — otherwise a loan officer could erase
+                // security evidence through the edit path. Additive edits
+                // (new photos, higher value, description) stay open.
+                $isDestructive = ! empty($removed) || $newValueMinor < (int) $collateral->estimated_value_minor;
+                if ($isDestructive && ! Gate::allows('write-off-loans')) {
+                    throw new \LogicException(__('Removing collateral photos or lowering its value requires a manager.'));
+                }
+
                 foreach ($removed as $path) {
                     Storage::disk('local')->delete($path);
                 }
@@ -606,7 +632,7 @@ class Show extends Component
                 $collateral->update([
                     'type' => $this->collateralType,
                     'description' => $this->collateralDescription ?: null,
-                    'estimated_value_minor' => Money::of((string) $this->collateralValue, $loan->currency, (int) $loan->scale)->minor,
+                    'estimated_value_minor' => $newValueMinor,
                     'photos' => array_merge($kept, $photos) ?: null,
                 ]);
                 $message = __('Collateral updated');

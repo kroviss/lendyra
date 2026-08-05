@@ -184,6 +184,24 @@ class Form extends Component
         };
     }
 
+    /**
+     * The penalty and early-payoff terms copied from the product onto the
+     * loan at origination, so re-pricing the product later never rewrites a
+     * live loan's penalty history (mirrors the annual_rate/basis snapshot).
+     *
+     * @return array<string, mixed>
+     */
+    private function penaltySnapshot(LoanProduct $product): array
+    {
+        return [
+            'penalty_daily_rate' => $product->penalty_daily_rate,
+            'penalty_grace_days' => (int) $product->penalty_grace_days,
+            'penalty_base' => $product->penalty_base->value,
+            'penalty_cap_percent' => $product->penalty_cap_percent,
+            'payoff_interest_mode' => $product->payoff_interest_mode->value,
+        ];
+    }
+
     /** Processing fee in minor units: principal × % + flat. */
     private function feeMinor(LoanProduct $product): int
     {
@@ -283,7 +301,7 @@ class Form extends Component
                     'disbursed_at' => $this->disbursed_at,
                     'first_due_date' => $this->first_due_date ?: null,
                     'purpose' => $this->purpose ?: null,
-                ]);
+                ] + $this->penaltySnapshot($product));
             });
 
             session()->flash('status', __('Loan updated'));
@@ -308,6 +326,7 @@ class Form extends Component
             'disbursed_at' => $this->disbursed_at,
             'first_due_date' => $this->first_due_date ?: null,
             'application_date' => today(),
+            ...$this->penaltySnapshot($product),
             'status' => Gate::allows('activate-loans')
                 ? LoanStatus::Approved
                 : LoanStatus::PendingApproval,
@@ -385,12 +404,28 @@ class Form extends Component
             }
         }
 
+        $productOptions = LoanProduct::where('is_active', true)
+            ->orderBy('name')
+            ->get()
+            ->map(fn ($p) => ['value' => $p->id, 'label' => $p->name]);
+
+        // A loan whose product was deactivated after origination must still
+        // show that product when edited — otherwise the select renders its
+        // placeholder while a value is set, and re-picking silently overwrites
+        // the loan's snapshotted rate/term.
+        if ($this->loan_product_id !== null && ! $productOptions->contains('value', $this->loan_product_id)) {
+            $selectedProduct = LoanProduct::find($this->loan_product_id);
+            if ($selectedProduct !== null) {
+                $productOptions->prepend([
+                    'value' => $selectedProduct->id,
+                    'label' => $selectedProduct->name.' ('.__('inactive').')',
+                ]);
+            }
+        }
+
         return view('livewire.loans.form', [
             'borrowerOptions' => $borrowerOptions,
-            'productOptions' => LoanProduct::where('is_active', true)
-                ->orderBy('name')
-                ->get()
-                ->map(fn ($p) => ['value' => $p->id, 'label' => $p->name]),
+            'productOptions' => $productOptions,
         ])->title($this->loan?->exists ? __('Edit loan') : __('New loan'));
     }
 }

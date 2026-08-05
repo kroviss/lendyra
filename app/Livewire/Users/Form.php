@@ -51,7 +51,13 @@ class Form extends Component
             'email' => ['required', 'email', Rule::unique('users', 'email')->ignore($this->user?->id)],
             'password' => $this->user ? 'nullable|min:8' : 'required|min:8',
             'role' => Rule::in(self::ROLES),
-            'branch_id' => 'nullable|exists:branches,id',
+            // When branch scoping is on, a non-admin/manager account with no
+            // branch would see every branch (the scope has nothing to bind to),
+            // so a branch is mandatory for scoped roles. ('nullable' and
+            // 'required' cannot share the rule list — nullable short-circuits.)
+            'branch_id' => config('lms.branch_scoping') && ! in_array($this->role, ['admin', 'manager'], true)
+                ? ['required', 'exists:branches,id']
+                : ['nullable', 'exists:branches,id'],
             'is_active' => 'boolean',
         ];
     }

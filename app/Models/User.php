@@ -36,6 +36,14 @@ class User extends Authenticatable
         };
     }
 
+    /**
+     * A branch id that can never match a real branch. Returned for a
+     * branch-scoped account that has no branch assigned so the scope fails
+     * CLOSED (matches nothing) instead of open (matches everything). It stays
+     * truthy so `->when($scope, …)` still fires the restriction.
+     */
+    public const NO_BRANCH_SENTINEL = -1;
+
     /** Branch the current user is restricted to, or null for full visibility. */
     public function scopedBranchId(): ?int
     {
@@ -43,7 +51,9 @@ class User extends Authenticatable
             return null;
         }
 
-        return $this->branch_id;
+        // A scoped role with no branch is a misconfiguration — never widen it
+        // into full visibility. Fail closed with a non-matching sentinel.
+        return $this->branch_id ?? self::NO_BRANCH_SENTINEL;
     }
 
     /**

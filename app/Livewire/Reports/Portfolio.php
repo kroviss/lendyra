@@ -44,69 +44,66 @@ class Portfolio extends Component
             ->map(fn ($outstanding) => (int) $outstanding)
             ->all();
 
+        // One grouped query per overdue loan: its oldest overdue date, its
+        // FULL outstanding principal (for PAR), and its overdue amount (for
+        // the detail rows). No per-loan whereIn round trip, and — critically —
+        // no hydrating a Loan/Borrower model for every loan in arrears.
+        $todayStr = $today->toDateString();
+
         $overdueAgg = LoanInstallment::query()
             ->join('loans', 'loans.id', '=', 'loan_installments.loan_id')
             ->tap($activeLoans)
-            ->whereNull('loan_installments.settled_at')
-            ->where('loan_installments.due_date', '<', $today)
-            ->groupBy('loan_installments.loan_id', 'loans.currency')
-            ->select(
-                'loan_installments.loan_id',
-                'loans.currency',
-                DB::raw("MIN({$li}.due_date) as first_overdue"),
-                DB::raw("SUM(CAST({$li}.principal_minor AS SIGNED) - CAST({$li}.principal_paid_minor AS SIGNED) + CAST({$li}.interest_minor AS SIGNED) - CAST({$li}.interest_paid_minor AS SIGNED) + CAST({$li}.penalty_minor AS SIGNED) - CAST({$li}.penalty_paid_minor AS SIGNED)) as overdue_minor")
-            )
-            ->get()
-            ->keyBy('loan_id');
-
-        // Per-loan outstanding is only needed for the loans in arrears.
-        $outstandingPerLoan = LoanInstallment::query()
-            ->whereIn('loan_id', $overdueAgg->keys())
-            ->groupBy('loan_id')
-            ->select('loan_id', DB::raw('SUM(CAST(principal_minor AS SIGNED) - CAST(principal_paid_minor AS SIGNED)) as outstanding'))
-            ->pluck('outstanding', 'loan_id');
+            ->groupBy('loans.id', 'loans.currency')
+            ->havingRaw('first_overdue IS NOT NULL')
+            ->select('loans.id as loan_id', 'loans.currency')
+            ->selectRaw("MIN(CASE WHEN {$li}.settled_at IS NULL AND {$li}.due_date < ? THEN {$li}.due_date END) as first_overdue", [$todayStr])
+            ->selectRaw("SUM(CAST({$li}.principal_minor AS SIGNED) - CAST({$li}.principal_paid_minor AS SIGNED)) as outstanding")
+            ->selectRaw("SUM(CASE WHEN {$li}.settled_at IS NULL AND {$li}.due_date < ? THEN (CAST({$li}.principal_minor AS SIGNED) - CAST({$li}.principal_paid_minor AS SIGNED) + CAST({$li}.interest_minor AS SIGNED) - CAST({$li}.interest_paid_minor AS SIGNED) + CAST({$li}.penalty_minor AS SIGNED) - CAST({$li}.penalty_paid_minor AS SIGNED)) ELSE 0 END) as overdue_minor", [$todayStr])
+            ->get();
 
         $parBuckets = [30 => [], 60 => [], 90 => []];
 
-        foreach ($overdueAgg as $loanId => $agg) {
-            $outstanding = (int) ($outstandingPerLoan[$loanId] ?? 0);
+        foreach ($overdueAgg as $agg) {
             $days = (int) Carbon::parse($agg->first_overdue)->diffInDays($today);
 
             foreach ([30, 60, 90] as $bucket) {
                 if ($days > $bucket) {
-                    $parBuckets[$bucket][$agg->currency] = ($parBuckets[$bucket][$agg->currency] ?? 0) + $outstanding;
+                    $parBuckets[$bucket][$agg->currency] = ($parBuckets[$bucket][$agg->currency] ?? 0) + (int) $agg->outstanding;
                 }
             }
         }
 
-        // Detail rows: hydrate ONLY overdue loans, worst first, capped.
-        $overdueRows = [];
-        $overdueLoans = Loan::with('borrower')
-            ->whereIn('id', $overdueAgg->keys())
+        // Detail rows: take only the worst 200 (oldest overdue first) and
+        // hydrate just those loans — never the whole book in arrears.
+        $overdueTotal = $overdueAgg->count();
+        $worst = $overdueAgg->sortBy('first_overdue')->take(200)->values();
+
+        $detailLoans = Loan::with('borrower')
+            ->whereIn('id', $worst->pluck('loan_id'))
             ->get()
             ->keyBy('id');
 
-        foreach ($overdueAgg as $loanId => $agg) {
-            $loan = $overdueLoans->get($loanId);
+        $overdueRows = $worst
+            ->map(function ($agg) use ($detailLoans, $today) {
+                $loan = $detailLoans->get($agg->loan_id);
 
-            if (! $loan) {
-                continue;
-            }
+                if (! $loan) {
+                    return null;
+                }
 
-            $overdueRows[] = [
-                'id' => $loan->id,
-                'loan_number' => $loan->loan_number,
-                'borrower' => $loan->borrower?->fullName() ?? '—',
-                'days' => (int) Carbon::parse($agg->first_overdue)->diffInDays($today),
-                'overdue' => Money::minor((int) $agg->overdue_minor, $loan->currency, (int) $loan->scale)->formatted(),
-                'outstanding' => Money::minor((int) ($outstandingPerLoan[$loanId] ?? 0), $loan->currency, (int) $loan->scale)->formatted(),
-                'currency' => $loan->currency,
-            ];
-        }
-
-        usort($overdueRows, fn ($a, $b) => $b['days'] <=> $a['days']);
-        $overdueTotal = count($overdueRows);
-        $overdueRows = array_slice($overdueRows, 0, 200);
+                return [
+                    'id' => $loan->id,
+                    'loan_number' => $loan->loan_number,
+                    'borrower' => $loan->borrower?->fullName() ?? '—',
+                    'days' => (int) Carbon::parse($agg->first_overdue)->diffInDays($today),
+                    'overdue' => Money::minor((int) $agg->overdue_minor, $loan->currency, (int) $loan->scale)->formatted(),
+                    'outstanding' => Money::minor((int) $agg->outstanding, $loan->currency, (int) $loan->scale)->formatted(),
+                    'currency' => $loan->currency,
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
 
         // PAR ratio per currency: risky outstanding / total outstanding.
         $ratio = function (array $bucket) use ($totalOutstanding): string {

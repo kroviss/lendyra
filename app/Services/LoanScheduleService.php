@@ -24,7 +24,7 @@ class LoanScheduleService
     public function generateAndPersist(Loan $loan): Schedule
     {
         if (! $loan->status->scheduleIsMutable()) {
-            throw new LogicException("Cannot regenerate the schedule of a {$loan->status->value} loan.");
+            throw new LogicException(__('The schedule cannot be regenerated for a :status loan.', ['status' => $loan->status->label()]));
         }
 
         $schedule = $this->preview($loan);

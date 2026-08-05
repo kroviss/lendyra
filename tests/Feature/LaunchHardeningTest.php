@@ -130,13 +130,42 @@ class LaunchHardeningTest extends TestCase
         Livewire::actingAs($cashier)
             ->test(Show::class, ['loan' => $loan->id])
             ->set('paymentAmount', 100.0)
-            ->set('paymentDate', '2026-02-15')
+            ->set('paymentDate', today()->format('Y-m-d'))
             ->call('recordPayment')
             ->assertSet('actionError', null);
 
         $this->assertSame(1, $loan->payments()->count());
         $this->actingAs($cashier)->get('/users')->assertForbidden();
         $this->actingAs($cashier)->get('/loans/create')->assertForbidden();
+    }
+
+    public function test_cashier_cannot_backdate_beyond_the_window_but_a_manager_can(): void
+    {
+        config()->set('lms.payment_backdate_days', 7);
+        $old = today()->subDays(30)->format('Y-m-d');
+
+        // A cashier is capped to the recent window — dating a payment onto an
+        // old overdue due date would silently erase accrued penalty (a
+        // manager-only waiver in disguise), so it is rejected.
+        $loan = $this->makeActiveLoan();
+        Livewire::actingAs($this->makeUser('cashier'))
+            ->test(Show::class, ['loan' => $loan->id])
+            ->set('paymentAmount', 100.0)
+            ->set('paymentDate', $old)
+            ->call('recordPayment')
+            ->assertHasErrors('paymentDate');
+        $this->assertSame(0, $loan->payments()->count());
+
+        // A manager (write-off-loans) may backdate to disbursement.
+        $loan2 = $this->makeActiveLoan();
+        Livewire::actingAs($this->makeUser('manager'))
+            ->test(Show::class, ['loan' => $loan2->id])
+            ->set('paymentAmount', 100.0)
+            ->set('paymentDate', $old)
+            ->call('recordPayment')
+            ->assertHasNoErrors('paymentDate')
+            ->assertSet('actionError', null);
+        $this->assertSame(1, $loan2->payments()->count());
     }
 
     public function test_admin_can_manage_users_page(): void

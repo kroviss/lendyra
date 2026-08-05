@@ -184,7 +184,8 @@
                                 @if (! $installment->isSettled() && $installment->penaltyDue()->minor > 0)
                                     <button wire:click="waivePenalty({{ $installment->id }})"
                                         wire:confirm="{{ __('Waive the outstanding penalty on this installment?') }}"
-                                        class="ml-1 text-xs text-gray-400 hover:text-red-600">{{ __('waive') }}</button>
+                                        wire:loading.attr="disabled" wire:target="waivePenalty"
+                                        class="ml-1 text-xs text-gray-400 hover:text-red-600 disabled:opacity-50">{{ __('waive') }}</button>
                                 @endif
                             @endcan
                         </td>
@@ -247,7 +248,8 @@
                                     @can('reverse-payments')
                                         <button wire:click="reversePayment({{ $payment->id }})"
                                             wire:confirm="{{ __('Reverse this payment? Installment balances will be restored and a reversing ledger entry posted.') }}"
-                                            class="text-xs text-gray-400 hover:text-red-600">{{ __('Reverse') }}</button>
+                                            wire:loading.attr="disabled" wire:target="reversePayment"
+                                            class="text-xs text-gray-400 hover:text-red-600 disabled:opacity-50">{{ __('Reverse') }}</button>
                                     @endcan
                                 @endif
                             </td>
@@ -301,15 +303,15 @@
                         <span class="font-medium">{{ \LoanEngine\Money::minor((int) $collateral->estimated_value_minor, $loan->currency, (int) $loan->scale)->formatted() }}</span>
                         @if ($loanMutableForExtras)
                             @can('create-loans')
-                                <button wire:click="editCollateral({{ $collateral->id }})" class="text-xs text-gray-400 hover:text-indigo-600">{{ __('Edit') }}</button>
+                                <button wire:click="editCollateral({{ $collateral->id }})" wire:loading.attr="disabled" wire:target="editCollateral" class="text-xs text-gray-400 hover:text-indigo-600 disabled:opacity-50">{{ __('Edit') }}</button>
                             @endcan
                         @endif
                         @can('write-off-loans')
                             @if ($collateral->status === 'held')
-                                <button wire:click="releaseCollateral({{ $collateral->id }})" wire:confirm="{{ __('Release this collateral?') }}" class="text-xs text-gray-400 hover:text-gray-600">{{ __('Release') }}</button>
+                                <button wire:click="releaseCollateral({{ $collateral->id }})" wire:confirm="{{ __('Release this collateral?') }}" wire:loading.attr="disabled" wire:target="releaseCollateral" class="text-xs text-gray-400 hover:text-gray-600 disabled:opacity-50">{{ __('Release') }}</button>
                             @endif
                             @if ($loanMutableForExtras)
-                                <button wire:click="deleteCollateral({{ $collateral->id }})" wire:confirm="{{ __('Delete this collateral record?') }}" class="text-xs text-gray-400 hover:text-red-600">{{ __('Delete') }}</button>
+                                <button wire:click="deleteCollateral({{ $collateral->id }})" wire:confirm="{{ __('Delete this collateral record?') }}" wire:loading.attr="disabled" wire:target="deleteCollateral" class="text-xs text-gray-400 hover:text-red-600 disabled:opacity-50">{{ __('Delete') }}</button>
                             @endif
                         @endcan
                     </div>
@@ -341,8 +343,8 @@
                     <span class="flex items-center gap-3">
                         @if ($loanMutableForExtras)
                             @can('create-loans')
-                                <button wire:click="editGuarantor({{ $guarantor->id }})" class="text-xs text-gray-400 hover:text-indigo-600">{{ __('Edit') }}</button>
-                                <button wire:click="removeGuarantor({{ $guarantor->id }})" wire:confirm="{{ __('Remove this guarantor?') }}" class="text-xs text-gray-400 hover:text-red-600">{{ __('Remove') }}</button>
+                                <button wire:click="editGuarantor({{ $guarantor->id }})" wire:loading.attr="disabled" wire:target="editGuarantor" class="text-xs text-gray-400 hover:text-indigo-600 disabled:opacity-50">{{ __('Edit') }}</button>
+                                <button wire:click="removeGuarantor({{ $guarantor->id }})" wire:confirm="{{ __('Remove this guarantor?') }}" wire:loading.attr="disabled" wire:target="removeGuarantor" class="text-xs text-gray-400 hover:text-red-600 disabled:opacity-50">{{ __('Remove') }}</button>
                             @endcan
                         @endif
                     </span>

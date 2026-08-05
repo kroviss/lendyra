@@ -448,5 +448,13 @@
     "You do not have permission to do that.": "No tiene permiso para hacer eso.",
     "You do not have permission to view this page.": "No tiene permiso para ver esta página.",
     "Your session expired. Please log in again.": "Su sesión expiró. Inicie sesión de nuevo.",
-    "yr": "año"
+    "yr": "año",
+    "You can only backdate a payment up to :days days. Ask a manager to record older payments.": "Solo puede retroactivar un pago hasta :days días. Pida a un gerente que registre los pagos más antiguos.",
+    "Removing collateral photos or lowering its value requires a manager.": "Eliminar fotos de la garantía o reducir su valor requiere un gerente.",
+    "Loan :loan is :status and cannot accept payments.": "El préstamo :loan está :status y no puede aceptar pagos.",
+    "This payment has already been reversed.": "Este pago ya ha sido revertido.",
+    "Loan :loan is :status and cannot be settled.": "El préstamo :loan está :status y no puede liquidarse.",
+    "The schedule cannot be regenerated for a :status loan.": "El calendario no puede regenerarse para un préstamo :status.",
+    "inactive": "inactivo",
+    ":count loan is awaiting your approval|:count loans are awaiting your approval": ":count préstamo espera su aprobación|:count préstamos esperan su aprobación"
 }

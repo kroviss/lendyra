@@ -5,6 +5,7 @@ namespace App\Livewire\Borrowers;
 use App\Models\Borrower;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 
@@ -82,6 +83,12 @@ class Form extends Component
             // Re-check on save: mount's check alone would not survive a
             // forged Livewire snapshot.
             $this->authorizeBranch($this->borrower);
+
+            // Replacing the photo orphans the old file on the private (PII)
+            // disk — delete it once the new one is stored.
+            if (isset($data['photo_path']) && $this->borrower->photo_path) {
+                Storage::disk('local')->delete($this->borrower->photo_path);
+            }
 
             $this->borrower->update($data);
         } else {

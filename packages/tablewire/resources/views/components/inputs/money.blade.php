@@ -8,7 +8,13 @@
 ])
 
 @php
-    $model = $attributes->wire('model')->value();
+    $wireModel = $attributes->wire('model');
+    $model = $wireModel->value();
+    // Honor wire:model.live on money fields: the plain entangle below is
+    // deferred in Livewire 3, so a .live-bound amount would otherwise leave
+    // any dependent computed (e.g. a schedule preview) showing stale numbers
+    // until the next round trip. Plain (non-live) fields stay deferred.
+    $live = $wireModel->hasModifier('live');
     $name ??= $model ?? \Illuminate\Support\Str::random(8);
     $errorKey = $model ?? $name;
     $symbol ??= config('tablewire.currency_symbol', '');
@@ -23,7 +29,7 @@
 
     <div
         x-data="{
-            raw: @if ($model) $wire.entangle('{{ $model }}') @else null @endif,
+            raw: @if ($model) $wire.entangle('{{ $model }}')@if ($live).live @endif @else null @endif,
             display: '',
             format(value) {
                 if (value === null || value === '' || isNaN(Number(value))) return '';
@@ -41,8 +47,11 @@
                      - only ',': a final comma group of 1-2 digits is a
                        decimal ('12,3' / '1234,56'), otherwise commas are
                        thousands separators ('1,234' / '1,234,567');
-                     - only '.': the last dot is the decimal point
-                       (a single dot behaves exactly as before). --}}
+                     - only '.': symmetric to the comma case — a final dot
+                       group of 1-2 digits is a decimal ('12.3' / '1234.56'),
+                       otherwise dots are thousands separators, so the
+                       es/pt convention '1.234' / '2.500' / '1.234.567'
+                       parses to 1234 / 2500 / 1234567, not a fraction. --}}
                 const s = text.replace(/[^0-9.,]/g, '');
                 if (!/[0-9]/.test(s)) return null;
                 const lastDot = s.lastIndexOf('.');
@@ -53,7 +62,7 @@
                 } else if (lastComma !== -1) {
                     sep = /,[0-9]{1,2}$/.test(s) ? lastComma : -1;
                 } else if (lastDot !== -1) {
-                    sep = lastDot;
+                    sep = /\.[0-9]{1,2}$/.test(s) ? lastDot : -1;
                 }
                 const digits = part => part.replace(/[^0-9]/g, '');
                 const intPart = digits(sep === -1 ? s : s.slice(0, sep));

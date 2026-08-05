@@ -22,6 +22,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Payment backdating window (days)
+    |--------------------------------------------------------------------------
+    | How far back a cashier (a user without the write-off/waiver privilege)
+    | may date a payment. Backdating a payment onto or before an overdue
+    | installment's due date silently erases accrued penalties — a manager-only
+    | waiver in disguise — so cashiers are capped to this window. Admins and
+    | managers (the write-off-loans gate) may still backdate to disbursement.
+    */
+    'payment_backdate_days' => (int) env('LMS_PAYMENT_BACKDATE_DAYS', 7),
+
+    /*
+    |--------------------------------------------------------------------------
     | Ledger account codes
     |--------------------------------------------------------------------------
     | Default chart-of-accounts codes the ledger posts against. They are

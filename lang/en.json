@@ -448,5 +448,13 @@
     "You do not have permission to do that.": "You do not have permission to do that.",
     "You do not have permission to view this page.": "You do not have permission to view this page.",
     "Your session expired. Please log in again.": "Your session expired. Please log in again.",
-    "yr": "yr"
+    "yr": "yr",
+    "You can only backdate a payment up to :days days. Ask a manager to record older payments.": "You can only backdate a payment up to :days days. Ask a manager to record older payments.",
+    "Removing collateral photos or lowering its value requires a manager.": "Removing collateral photos or lowering its value requires a manager.",
+    "Loan :loan is :status and cannot accept payments.": "Loan :loan is :status and cannot accept payments.",
+    "This payment has already been reversed.": "This payment has already been reversed.",
+    "Loan :loan is :status and cannot be settled.": "Loan :loan is :status and cannot be settled.",
+    "The schedule cannot be regenerated for a :status loan.": "The schedule cannot be regenerated for a :status loan.",
+    "inactive": "inactive",
+    ":count loan is awaiting your approval|:count loans are awaiting your approval": ":count loan is awaiting your approval|:count loans are awaiting your approval"
 }

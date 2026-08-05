@@ -31,7 +31,7 @@ class RepaymentService
         bool $isPayoff = false,
     ): LoanPayment {
         if (! $loan->status->acceptsPayments()) {
-            throw new LogicException("Loan {$loan->loan_number} is {$loan->status->value} and cannot accept payments.");
+            throw new LogicException(__('Loan :loan is :status and cannot accept payments.', ['loan' => $loan->loan_number, 'status' => $loan->status->label()]));
         }
         if ($amount->minor <= 0) {
             throw new InvalidArgumentException('Payment amount must be positive.');
@@ -46,7 +46,7 @@ class RepaymentService
             $loan = Loan::lockForUpdate()->findOrFail($loan->id);
 
             if (! $loan->status->acceptsPayments()) {
-                throw new LogicException("Loan {$loan->loan_number} is {$loan->status->value} and cannot accept payments.");
+                throw new LogicException(__('Loan :loan is :status and cannot accept payments.', ['loan' => $loan->loan_number, 'status' => $loan->status->label()]));
             }
 
             // Bring penalties up to the payment date before allocating —
@@ -126,7 +126,7 @@ class RepaymentService
     public function reverse(LoanPayment $payment, ?int $reversedBy = null): void
     {
         if ($payment->reversed_at !== null) {
-            throw new LogicException('Payment is already reversed.');
+            throw new LogicException(__('This payment has already been reversed.'));
         }
 
         DB::transaction(function () use ($payment, $reversedBy) {
@@ -135,7 +135,7 @@ class RepaymentService
             $payment = LoanPayment::lockForUpdate()->findOrFail($payment->id);
 
             if ($payment->reversed_at !== null) {
-                throw new LogicException('Payment is already reversed.');
+                throw new LogicException(__('This payment has already been reversed.'));
             }
 
             $loan = Loan::lockForUpdate()->findOrFail($payment->loan_id);

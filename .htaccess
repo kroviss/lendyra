@@ -1,0 +1,24 @@
+# Safety net for shared-hosting buyers who point the docroot at the project
+# root instead of public/ (the documented setup). This denies direct access
+# to the source, environment and storage so /.env, /storage/logs, /app etc.
+# are never served even when the docroot is misconfigured.
+#
+# The correct setup is still to point the web root at public/ — see
+# docs/INSTALL.md. This file only limits the blast radius of a mistake.
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    # Everything is served through public/ — send all traffic there.
+    RewriteRule ^(\.env|\.git|composer\.(json|lock)|package(-lock)?\.json) - [F,L]
+    RewriteRule ^(app|bootstrap|config|database|lang|resources|routes|scripts|src|storage|tests|vendor)/ - [F,L]
+</IfModule>
+
+# Deny any dotfile (Apache 2.4+).
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+# Belt-and-suspenders for the environment file specifically.
+<Files .env>
+    Require all denied
+</Files>

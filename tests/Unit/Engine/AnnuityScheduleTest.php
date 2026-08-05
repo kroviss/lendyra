@@ -166,6 +166,51 @@ class AnnuityScheduleTest extends TestCase
         $this->assertSame(3000, $count);
     }
 
+    private function ratedSchedule(Money $principal, int $termCount, float $rate, RepaymentFrequency $frequency = RepaymentFrequency::Monthly): Schedule
+    {
+        return ScheduleGenerator::generate(new LoanTerms(
+            principal: $principal,
+            annualRatePercent: $rate,
+            termCount: $termCount,
+            frequency: $frequency,
+            method: InterestMethod::Annuity,
+            disbursedAt: new DateTimeImmutable('2026-01-15'),
+        ));
+    }
+
+    /**
+     * The rate > 0 twin of the zero-rate tiny-principal guard: rounding the
+     * level payment up used to drive a non-last row's principal past the
+     * remaining balance, turning it negative before the last row and tripping
+     * the Schedule invariant (surviving generate() IS the proof). These are
+     * the exact cases the 9th-audit engine pass reproduced.
+     */
+    public function test_rated_tiny_principals_do_not_over_amortize(): void
+    {
+        $cases = [
+            [Money::of('0.54'), 12, 1.0],
+            [Money::of('19.98'), 24, 360.0],
+            [Money::of('7.27'), 36, 1.0],
+            [Money::minor(199977, 'USD', 0), 600, 12.0], // 0-decimal currency, long term
+        ];
+
+        foreach ($cases as [$principal, $termCount, $rate]) {
+            $schedule = $this->ratedSchedule($principal, $termCount, $rate);
+
+            $this->assertCount($termCount, $schedule->installments);
+            $this->assertTrue($schedule->last()->closingBalance->isZero());
+
+            $sum = 0;
+            foreach ($schedule->installments as $installment) {
+                $this->assertFalse($installment->principal->isNegative(), "Installment {$installment->number}");
+                $this->assertFalse($installment->closingBalance->isNegative(), "Closing {$installment->number}");
+                $sum += $installment->principal->minor;
+            }
+
+            $this->assertSame($principal->minor, $sum);
+        }
+    }
+
     public function test_annuity_rejects_actual_day_basis(): void
     {
         $this->expectException(InvalidArgumentException::class);
