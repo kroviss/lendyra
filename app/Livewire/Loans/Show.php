@@ -22,6 +22,7 @@ use Livewire\Attributes\Locked;
 use Livewire\Component;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Livewire\WithFileUploads;
+use LoanEngine\AccrualBasis;
 use LoanEngine\Money;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Throwable;
@@ -180,16 +181,44 @@ class Show extends Component
                 $loan->update(['disbursed_at' => today()]);
                 $loan->refresh();
 
-                // Re-anchoring can leave a planned first due date far beyond
-                // today (e.g. a disbursement pulled months forward), which
-                // would misprice the first installment — same bound as the
-                // loan form.
+                // The first due date was planned against the ORIGINAL
+                // disbursement date; re-anchoring on today can leave it
+                // anywhere relative to the real one. Nobody chose the new
+                // first-period length, so every direction is an error the
+                // officer must resolve by editing the loan — never a silent
+                // repricing.
                 if ($loan->first_due_date !== null) {
-                    $ceiling = Form::firstDueDateCeiling($loan->disbursed_at->format('Y-m-d'), $loan->frequency);
+                    $disbursed = $loan->disbursed_at->format('Y-m-d');
+                    $planned = $loan->first_due_date->format('Y-m-d');
+                    $ceiling = Form::firstDueDateCeiling($disbursed, $loan->frequency);
+                    $floor = Form::firstDueDateFloor($disbursed, $loan->frequency);
 
-                    if ($loan->first_due_date->format('Y-m-d') > $ceiling->format('Y-m-d')) {
+                    // Too far out: the first installment spans several
+                    // periods but equal-periods pricing bills only one.
+                    if ($planned > $ceiling->format('Y-m-d')) {
                         throw new \LogicException(__('First due date must be within two repayment periods of disbursement (on or before :date).', [
                             'date' => $ceiling->format('Y-m-d'),
+                        ]));
+                    }
+
+                    // Already past: the engine would reject this with a bare
+                    // "must be after disbursement" that says nothing about
+                    // what to do next.
+                    if ($planned <= $disbursed) {
+                        throw new \LogicException(__('The planned first due date (:planned) is on or before today\'s disbursement. Edit the loan and set a later first due date before disbursing.', [
+                            'planned' => $planned,
+                        ]));
+                    }
+
+                    // Too close: under equal-periods pricing a days-long
+                    // stub still bills a FULL period of interest — the
+                    // borrower would be overcharged by a re-anchoring they
+                    // never agreed to. Daily bases price stubs correctly.
+                    if ($loan->basis === AccrualBasis::EqualPeriods && $planned < $floor->format('Y-m-d')) {
+                        throw new \LogicException(__('The planned first due date (:planned) is only :days day(s) after today\'s disbursement, but equal-periods pricing would bill a full period of interest. Edit the loan and set a first due date on or after :floor.', [
+                            'planned' => $planned,
+                            'days' => $loan->disbursed_at->diffInDays($loan->first_due_date),
+                            'floor' => $floor->format('Y-m-d'),
                         ]));
                     }
                 }
@@ -519,6 +548,15 @@ class Show extends Component
 
     public function getPayoffQuoteProperty(): ?array
     {
+        // An empty or half-typed date must not quote: new DateTimeImmutable('')
+        // is valid PHP and silently means "now", so clearing the field would
+        // keep showing a confident number for a date the user never chose.
+        $parsed = \DateTime::createFromFormat('Y-m-d', $this->payoffDate);
+
+        if (! $parsed || $parsed->format('Y-m-d') !== $this->payoffDate) {
+            return null;
+        }
+
         try {
             $quote = app(PayoffService::class)->quote($this->loan(), new DateTimeImmutable($this->payoffDate));
 
@@ -595,8 +633,10 @@ class Show extends Component
             $loan = $this->loan();
 
             // Private disk: photos are served through the authenticated
-            // /media route, never as world-readable /storage URLs.
-            $photos = collect($this->collateralPhotos)
+            // /media route, never as world-readable /storage URLs. Nothing
+            // is written until every guard below has passed — a throw after
+            // the upload would strand orphaned files on the private disk.
+            $store = fn () => collect($this->collateralPhotos)
                 ->map(fn ($photo) => $photo->store('collaterals', 'local'))
                 ->all();
 
@@ -633,7 +673,7 @@ class Show extends Component
                     'type' => $this->collateralType,
                     'description' => $this->collateralDescription ?: null,
                     'estimated_value_minor' => $newValueMinor,
-                    'photos' => array_merge($kept, $photos) ?: null,
+                    'photos' => array_merge($kept, $store()) ?: null,
                 ]);
                 $message = __('Collateral updated');
             } else {
@@ -641,7 +681,7 @@ class Show extends Component
                     'type' => $this->collateralType,
                     'description' => $this->collateralDescription ?: null,
                     'estimated_value_minor' => Money::of((string) $this->collateralValue, $loan->currency, (int) $loan->scale)->minor,
-                    'photos' => $photos ?: null,
+                    'photos' => $store() ?: null,
                 ]);
                 $message = __('Collateral added');
             }

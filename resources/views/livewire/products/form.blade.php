@@ -25,6 +25,8 @@
                 <x-tablewire::inputs.text label="{{ __('Processing fee %') }}" type="number" min="0" step="0.01" wire:model.blur="processing_fee_percent" required
                     hint="{{ __('Charged on disbursement, % of principal') }}" />
                 <x-tablewire::inputs.text label="{{ __('Processing fee flat') }}" type="number" min="0" step="0.01" wire:model.blur="processing_fee_flat" hint="{{ __('Fixed amount added to the fee') }}" />
+                <x-tablewire::inputs.text label="{{ __('Minimum term (installments)') }}" type="number" min="1" wire:model.blur="min_term_count" hint="{{ __('Empty = no minimum') }}" />
+                <x-tablewire::inputs.text label="{{ __('Maximum term (installments)') }}" type="number" min="1" wire:model.blur="max_term_count" hint="{{ __('Empty = no maximum') }}" />
             </div>
         </div>
 
@@ -47,6 +49,17 @@
                 <x-tablewire::inputs.text label="{{ __('Grace days') }}" type="number" wire:model.blur="penalty_grace_days" required />
                 <x-tablewire::inputs.select label="{{ __('Base') }}" wire:model="penalty_base" :options="$penaltyBaseOptions" required />
                 <x-tablewire::inputs.text label="{{ __('Cap % of base') }}" type="number" step="0.01" wire:model.blur="penalty_cap_percent" hint="{{ __('Empty = no cap') }}" />
+            </div>
+        </div>
+
+        <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <h2 class="mb-1 text-base font-semibold">{{ __('Payment allocation') }}</h2>
+            <p class="mb-4 text-sm text-gray-500">{{ __('How a partial payment is split across what the borrower owes.') }}</p>
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <x-tablewire::inputs.select label="{{ __('Waterfall order') }}" wire:model="allocation_order" :options="$allocationOrderOptions" required
+                    hint="{{ __('Each component is paid off before the next one is touched.') }}" />
+                <x-tablewire::inputs.select label="{{ __('Allocation mode') }}" wire:model.live="allocation_mode" :options="$allocationModeOptions" required
+                    hint="{{ $allocationModeHint }}" />
             </div>
         </div>
 

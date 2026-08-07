@@ -156,9 +156,28 @@ limiter. If you run behind nginx, a load balancer, or a CDN, set
 
 ## Branch scoping (optional)
 
-Set `LMS_BRANCH_SCOPING=true` to restrict loan officers and cashiers to
-records of their own branch. Admins and managers always see everything.
-Users without a branch are not restricted.
+Set `LMS_BRANCH_SCOPING=true` to restrict loan officers, cashiers and
+accountants to records of their own branch. Admins and managers always see
+everything.
+
+Scoping fails **closed**: a scoped account left without a branch sees
+nothing rather than everything, and the user form requires a branch for
+those roles while scoping is on. Records that themselves carry no branch
+(created before scoping was switched on, or by a branchless admin) stay
+visible to everyone. The trial balance is org-wide and is not offered to
+scoped accounts at all.
+
+## Payment backdating window
+
+```
+LMS_PAYMENT_BACKDATE_DAYS=7
+```
+
+Dating a payment on or before an overdue installment's due date erases the
+penalty that had accrued on it — a waiver in disguise. Users **without**
+the write-off/waiver privilege (cashiers, loan officers) can therefore only
+backdate a payment this many days. Admins and managers may still backdate
+all the way to the disbursement date.
 
 ## Translation
 

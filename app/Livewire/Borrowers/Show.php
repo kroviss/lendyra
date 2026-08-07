@@ -7,6 +7,7 @@ use App\Models\Borrower;
 use App\Support\CurrencyScale;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
 
@@ -41,6 +42,15 @@ class Show extends Component
             $this->dispatch('toast', message: __('Cannot delete: this borrower has loan history.'));
 
             return;
+        }
+
+        // The ID photo is PII sitting on the private disk; leaving it there
+        // means a deleted borrower's face outlives the record. Delete is
+        // only offered when there is no loan history and there is no
+        // restore path, so the file goes with the row.
+        if ($borrower->photo_path) {
+            Storage::disk('local')->delete($borrower->photo_path);
+            $borrower->forceFill(['photo_path' => null])->save();
         }
 
         $borrower->delete();

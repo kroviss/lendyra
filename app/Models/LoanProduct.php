@@ -51,12 +51,32 @@ class LoanProduct extends Model
         );
     }
 
+    /** The default waterfall, used to fill any gap in a stored order. */
+    public const DEFAULT_ALLOCATION_ORDER = ['penalty', 'interest', 'principal'];
+
+    /**
+     * The waterfall this product allocates payments by.
+     *
+     * The stored order is sanitized rather than trusted: unknown or
+     * duplicated entries are dropped and any missing component is appended
+     * in the default order. AllocationPolicy rejects a partial order (it
+     * would strand a component forever), and a product row edited straight
+     * in SQL must degrade to a sane waterfall, not fatal the payment page.
+     */
     public function allocationPolicy(): AllocationPolicy
     {
-        $order = collect($this->allocation_order ?: ['penalty', 'interest', 'principal'])
+        $order = collect($this->allocation_order ?: self::DEFAULT_ALLOCATION_ORDER)
+            ->filter(fn ($c) => is_string($c) && AllocationComponent::tryFrom($c) !== null)
+            ->unique()
+            ->merge(self::DEFAULT_ALLOCATION_ORDER)
+            ->unique()
             ->map(fn (string $c) => AllocationComponent::from($c))
+            ->values()
             ->all();
 
-        return new AllocationPolicy(order: $order, mode: $this->allocation_mode);
+        return new AllocationPolicy(
+            order: $order,
+            mode: $this->allocation_mode ?? AllocationMode::OldestInstallmentFirst,
+        );
     }
 }

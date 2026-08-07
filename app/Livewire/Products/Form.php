@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Livewire\Component;
 use LoanEngine\AccrualBasis;
+use LoanEngine\AllocationComponent;
+use LoanEngine\AllocationMode;
 use LoanEngine\InterestMethod;
 use LoanEngine\Money;
 use LoanEngine\PenaltyBase;
@@ -51,7 +53,27 @@ class Form extends Component
 
     public string $penalty_cap_percent = '';
 
+    public string $min_term_count = '';
+
+    public string $max_term_count = '';
+
+    public string $allocation_mode = 'oldest_installment_first';
+
+    /** Comma-joined waterfall, chosen from the presets below. */
+    public string $allocation_order = 'penalty,interest,principal';
+
     public bool $is_active = true;
+
+    /**
+     * The waterfall orders offered in the UI. Restricting the choice to a
+     * preset list guarantees every order is a full permutation of the
+     * three components — a partial order would strand one forever.
+     */
+    public const ALLOCATION_ORDERS = [
+        'penalty,interest,principal',
+        'interest,principal,penalty',
+        'principal,interest,penalty',
+    ];
 
     // Livewire binds the {product} route parameter to the typed public
     // property as a model — accept both shapes like Users\Form does.
@@ -83,6 +105,15 @@ class Form extends Component
             $this->penalty_grace_days = (string) $this->product->penalty_grace_days;
             $this->penalty_base = $this->product->penalty_base->value;
             $this->penalty_cap_percent = (string) ($this->product->penalty_cap_percent ?? '');
+            $this->min_term_count = (string) ($this->product->min_term_count ?? '');
+            $this->max_term_count = (string) ($this->product->max_term_count ?? '');
+            $this->allocation_mode = $this->product->allocationPolicy()->mode->value;
+            // Read back through allocationPolicy() so a hand-edited or
+            // legacy row still maps onto one of the offered presets.
+            $this->allocation_order = implode(',', array_map(
+                fn ($c) => $c->value,
+                $this->product->allocationPolicy()->order
+            ));
             $this->is_active = $this->product->is_active;
         }
     }
@@ -120,6 +151,12 @@ class Form extends Component
             'basis' => Rule::enum(AccrualBasis::class),
             'annual_rate' => 'required|numeric|min:0|max:1000',
             'term_count' => 'required|integer|min:1|max:600',
+            // Term limits are enforced on every loan originated against
+            // this product, exactly like the principal limits.
+            'min_term_count' => 'nullable|integer|min:1|max:600',
+            'max_term_count' => 'nullable|integer|min:1|max:600|gte:min_term_count',
+            'allocation_mode' => Rule::enum(AllocationMode::class),
+            'allocation_order' => Rule::in(self::ALLOCATION_ORDERS),
             'min_principal' => 'nullable|numeric|min:0',
             'max_principal' => 'nullable|numeric|min:0|gte:min_principal',
             'processing_fee_percent' => 'required|numeric|min:0|max:100',
@@ -156,6 +193,11 @@ class Form extends Component
         $data['max_principal_minor'] = $data['max_principal'] === '' ? null : $toMinor($data['max_principal']);
         $data['processing_fee_flat_minor'] = $data['processing_fee_flat'] === '' ? 0 : $toMinor($data['processing_fee_flat']);
         unset($data['min_principal'], $data['max_principal'], $data['processing_fee_flat']);
+
+        $data['min_term_count'] = $data['min_term_count'] === '' ? null : (int) $data['min_term_count'];
+        $data['max_term_count'] = $data['max_term_count'] === '' ? null : (int) $data['max_term_count'];
+        // Stored as JSON so the engine reads a real list, not a CSV string.
+        $data['allocation_order'] = explode(',', $data['allocation_order']);
 
         // Annuity math is only defined for equal periods — force-correct
         // the basis rather than persist an impossible combination.
@@ -210,6 +252,20 @@ class Form extends Component
                 ->map(fn ($c) => ['value' => $c->value, 'label' => $c->label()]),
             'penaltyBaseOptions' => collect(PenaltyBase::cases())
                 ->map(fn ($c) => ['value' => $c->value, 'label' => $c->label()]),
+            'allocationModeOptions' => collect(AllocationMode::cases())
+                ->map(fn ($c) => ['value' => $c->value, 'label' => $c->label()]),
+            'allocationOrderOptions' => collect(self::ALLOCATION_ORDERS)
+                ->map(fn (string $order) => [
+                    'value' => $order,
+                    'label' => implode(' → ', array_map(
+                        fn (string $c) => AllocationComponent::from($c)->label(),
+                        explode(',', $order)
+                    )),
+                ]),
+            // tryFrom: render must survive a forged/half-typed value; the
+            // validator is what actually rejects it on save.
+            'allocationModeHint' => (AllocationMode::tryFrom($this->allocation_mode)
+                ?? AllocationMode::OldestInstallmentFirst)->hint(),
         ])->title($this->product ? __('Edit product') : __('New product'));
     }
 }

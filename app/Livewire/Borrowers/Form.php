@@ -73,6 +73,13 @@ class Form extends Component
         $data = $this->validate();
         unset($data['photo']);
 
+        // Re-check on save BEFORE anything reaches the disk: mount's check
+        // alone would not survive a forged Livewire snapshot, and a 403
+        // raised after the upload would strand an orphaned PII file.
+        if ($this->borrower) {
+            $this->authorizeBranch($this->borrower);
+        }
+
         if ($this->photo) {
             // Private disk: PII photos are served through the authenticated
             // /media route, never as world-readable /storage URLs.
@@ -80,10 +87,6 @@ class Form extends Component
         }
 
         if ($this->borrower) {
-            // Re-check on save: mount's check alone would not survive a
-            // forged Livewire snapshot.
-            $this->authorizeBranch($this->borrower);
-
             // Replacing the photo orphans the old file on the private (PII)
             // disk — delete it once the new one is stored.
             if (isset($data['photo_path']) && $this->borrower->photo_path) {

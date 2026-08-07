@@ -13,6 +13,7 @@ use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Livewire\Component;
+use LoanEngine\AccrualBasis;
 use LoanEngine\LoanTerms;
 use LoanEngine\Money;
 use LoanEngine\RepaymentFrequency;
@@ -133,7 +134,28 @@ class Form extends Component
                 },
             ],
             'annual_rate' => 'required|numeric|min:0|max:1000',
-            'term_count' => 'required|integer|min:1|max:600',
+            'term_count' => [
+                'required', 'integer', 'min:1', 'max:600',
+                // Product term limits — configured per product alongside the
+                // principal limits, and enforced the same way.
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    $product = LoanProduct::find($this->loan_product_id);
+
+                    if ($product === null || ! ctype_digit((string) $value)) {
+                        return;
+                    }
+
+                    $term = (int) $value;
+
+                    if ($product->min_term_count !== null && $term < (int) $product->min_term_count) {
+                        $fail(__('Term is below this product\'s minimum of :min installments.', ['min' => (int) $product->min_term_count]));
+                    }
+
+                    if ($product->max_term_count !== null && $term > (int) $product->max_term_count) {
+                        $fail(__('Term exceeds this product\'s maximum of :max installments.', ['max' => (int) $product->max_term_count]));
+                    }
+                },
+            ],
             'disbursed_at' => 'required|date',
             'first_due_date' => [
                 'nullable',
@@ -182,6 +204,67 @@ class Form extends Component
             RepaymentFrequency::Biweekly => $anchor->addDays(28),
             RepaymentFrequency::Weekly => $anchor->addDays(14),
         };
+    }
+
+    /**
+     * Earliest first due date that prices period 1 honestly: half a
+     * repayment period after disbursement.
+     *
+     * Under the equal-periods basis period 1 charges exactly ONE periodic
+     * rate however short it really is, so a stub far below this bound
+     * bills a full month of interest for a handful of days. Daily bases
+     * (actual/365, actual/360) price stubs correctly and are exempt.
+     *
+     * Shared with activation, which re-anchors disbursement on the day
+     * the money actually moves — the borrower never chose that date, so
+     * there the bound is enforced instead of merely warned about.
+     */
+    public static function firstDueDateFloor(DateTimeImmutable|string $disbursedAt, RepaymentFrequency $frequency): CarbonImmutable
+    {
+        $anchor = CarbonImmutable::parse(
+            is_string($disbursedAt) ? $disbursedAt : $disbursedAt->format('Y-m-d')
+        )->startOfDay();
+
+        return match ($frequency) {
+            RepaymentFrequency::Monthly => $anchor->addDays(15),
+            RepaymentFrequency::Biweekly => $anchor->addDays(7),
+            RepaymentFrequency::Weekly => $anchor->addDays(3),
+        };
+    }
+
+    /**
+     * Warn — never block — when the chosen first due date makes period 1 a
+     * short stub that equal-periods pricing still bills in full. At
+     * origination the date is a deliberate choice (calendar-anchored
+     * lending is legitimate), so the officer only needs to see what it
+     * costs the borrower.
+     */
+    public function getFirstPeriodWarningProperty(): ?string
+    {
+        if ($this->first_due_date === '' || $this->disbursed_at === '' || ! $this->loan_product_id) {
+            return null;
+        }
+
+        $product = LoanProduct::find($this->loan_product_id);
+
+        if ($product === null
+            || $product->basis !== AccrualBasis::EqualPeriods
+            || ! strtotime($this->first_due_date) || ! strtotime($this->disbursed_at)) {
+            return null;
+        }
+
+        $first = CarbonImmutable::parse($this->first_due_date)->startOfDay();
+        $disbursed = CarbonImmutable::parse($this->disbursed_at)->startOfDay();
+
+        if ($first->lte($disbursed) || $first->gte(self::firstDueDateFloor($this->disbursed_at, $product->frequency))) {
+            return null;
+        }
+
+        return __('Period 1 is only :days day(s) long but equal-periods pricing bills it as a full :frequency period. Move the first due date to :floor or later to price it normally.', [
+            'days' => $disbursed->diffInDays($first),
+            'frequency' => mb_strtolower($product->frequency->label()),
+            'floor' => self::firstDueDateFloor($this->disbursed_at, $product->frequency)->format('Y-m-d'),
+        ]);
     }
 
     /**

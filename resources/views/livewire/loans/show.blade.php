@@ -440,7 +440,7 @@
                         @if ($context['credit'])
                             <div class="flex justify-between"><dt class="text-emerald-600">{{ __('Unapplied credit') }}</dt><dd class="font-medium text-emerald-700">{{ $context['credit'] }}</dd></div>
                         @endif
-                        <p class="pt-1 text-xs text-gray-400">{{ __('Partial amounts are allocated by the product\'s waterfall (penalty → interest → principal).') }}</p>
+                        <p class="pt-1 text-xs text-gray-400">{{ __('Partial amounts are allocated by this product\'s waterfall: :order.', ['order' => $loan->product->allocationPolicy()->describe()]) }}</p>
                     </dl>
                 @endif
                 <div class="space-y-4">

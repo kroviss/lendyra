@@ -2,6 +2,50 @@
 
 All notable changes to Lendyra are documented here.
 
+## 1.0.5 — 2026-08-07
+
+### Fixed
+- **Disbursing a loan can no longer silently reprice its first period.**
+  Activation re-anchors the schedule on the day the money actually moves, but a
+  first due date planned weeks earlier was carried over unchecked. Under the
+  equal-periods basis period 1 charges exactly one periodic rate however short
+  it really is, so a loan prepared for a month-long first period and disbursed
+  three days before that date still billed a full month of interest. Activation
+  now refuses a planned first due date that falls on or before the disbursement,
+  or that would leave period 1 shorter than half a period, and says what to
+  change. Daily bases (actual/365, actual/360) price short stubs correctly and
+  are unaffected. The loan form warns about the same thing at origination
+  without blocking it — a deliberate calendar anchor is still a valid choice.
+- **A currency dropped by its last product no longer renders 100× too small.**
+  The currency→scale map was built only from `loan_products`, so re-pointing a
+  product at another currency left the loans already booked in the old one
+  falling back to two decimals: a ¥1,200,000 portfolio read as "12,000.00" on
+  the dashboard, portfolio, collections, payments and trial balance. Loans
+  snapshot their own currency and scale, and are now the fallback.
+
+### Added
+- **The payment waterfall is configurable from the product form.** Allocation
+  order (penalty → interest → principal, plus two alternatives) and allocation
+  mode (oldest installment first / component across the whole loan) were already
+  honoured by the engine but reachable only by editing the database. The payment
+  modal now names the product's actual waterfall instead of assuming the default.
+- **Minimum and maximum term** per product, enforced on every loan originated
+  against it — the columns had existed since 1.0 but nothing ever read them,
+  unlike the principal limits.
+
+### Security
+- Deleting a borrower now deletes their ID photo from the private disk instead
+  of leaving the image behind, and collateral uploads are written only after
+  every permission check has passed (a rejected edit used to strand files).
+- `.env.example` ships `LOG_LEVEL=error` rather than `debug`, so a production
+  install does not write debug-level records to disk by default.
+
+### Documentation
+- `LMS_PAYMENT_BACKDATE_DAYS` is documented in `.env.example` and
+  `docs/INSTALL.md`; it existed in 1.0.4 but appeared only in this changelog.
+- The branch-scoping section now describes the fail-closed behaviour introduced
+  in 1.0.4 — it still claimed branchless accounts were unrestricted.
+
 ## 1.0.4 — 2026-08-05
 
 ### Security
